@@ -1,4 +1,4 @@
-# APSystems Proxy
+# APSystems ECU Proxy
 
 ### &#x1F534; Warning: This integration is under construction and in very early stages - use at your own risk!
 
