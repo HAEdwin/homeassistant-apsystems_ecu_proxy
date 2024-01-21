@@ -15,14 +15,10 @@ ToDo
 
 ## Installation
 - If you haven't allready got one: Create a folder named "custom_components" in the config folder
-- Create a subfolder in the custom_components folder called "apsystems_proxy"
+- Create a subfolder in the custom_components folder called "apsystems_ecu_proxy"
 - Download the code and place it in the folder last mentioned
 - Restart Home Assistant (important!)
-- Add the following lines to your configuration.yaml
-```
-sensor:
-  platform: apsystems_proxy
-```
+
 - Restart Home Assistant once more and the proxy will load
 - Finally: Use PiHole or AdGuard to rewrite DNS ecu.apsystemsema.com to your HA instance IP-addess
 - Until now you'll only find data messages from your ECU and the EMA server in the log every 5 minutes (when sun is up) or 15 minutes (when sun is down)
