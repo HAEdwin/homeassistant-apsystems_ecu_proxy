@@ -9,6 +9,8 @@ from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.helpers.entity import Entity
+from homeassistant.const import UnitOfPower
 import logging
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,20 +23,20 @@ async def async_setup_entry(
 ) -> None:
     """Set up the sensor platform."""
     _LOGGER.warning("step 3: async_setup_entry from sensor.py")
-    add_entities([ExampleSensor()])
+    add_entities([MySensor()])
 
 
-class ExampleSensor(SensorEntity):
-    """Representation of a Sensor."""
+class MySensor(Entity):
+    def __init__(self):
+        self._state = "Hello, world!"
 
-    _attr_name = "Example Temperature"
-    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-    _attr_device_class = SensorDeviceClass.TEMPERATURE
-    _attr_state_class = SensorStateClass.MEASUREMENT
+    @property
+    def name(self):
+        return "my_sensor"
 
-    def update(self) -> None:
-        """Fetch new state data for the sensor.
+    @property
+    def state(self):
+        return self._state
 
-        This is the only method that should fetch new data for Home Assistant.
-        """
-        self._attr_native_value = 23
+    def update(self):
+        self._state = "Hi there!"
