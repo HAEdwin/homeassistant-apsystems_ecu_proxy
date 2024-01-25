@@ -17,12 +17,11 @@ DATA_SCHEMA = vol.Schema({"host": str})
 
 async def validate_input(hass: core.HomeAssistant, data):
     """Validate the user input allows us to connect."""
-    _LOGGER.warning(f"step 1: validate_input from config_flow.py data={data}")
+    _LOGGER.debug(f"step 1: validate_input from config_flow.py data={data}")
     try:
         await async_start_proxy(data)
     except APSystemsECUProxyInvalidData as err:
-        _LOGGER.debug(f"Error returned from async_start_proxy: {err}")
-        #raise friendly error
+        # raise friendly error after wrong input
         raise CannotConnect
     return {"title": "APSystems ECU Proxy"}        
 
@@ -37,6 +36,10 @@ class DomainConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
         errors = {}
+        # Only allow one instance of the hub allowed
+        if self._async_current_entries():
+            return self.async_abort(reason="already_configured")
+        # Validate user input
         if user_input is not None:
             try:
                 info = await validate_input(self.hass, user_input)
@@ -52,10 +55,5 @@ class DomainConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user", data_schema=DATA_SCHEMA, errors=errors
         )
 
-
 class CannotConnect(exceptions.HomeAssistantError):
     """Error to indicate we cannot connect."""
-
-
-class InvalidAuth(exceptions.HomeAssistantError):
-    """Error to indicate there is invalid auth."""
