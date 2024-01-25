@@ -13,7 +13,7 @@
       "unknown": "Unknown error, see log for details"
     },
     "abort": {
-      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
+      "already_configured": "Only single instance configuration possible"
     }
   },
   "config": {
@@ -30,7 +30,7 @@
       "unknown": "Unknown error, see log for details"
     },
     "abort": {
-      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
+      "already_configured": "Only single instance configuration possible"
     }
   }
 }
