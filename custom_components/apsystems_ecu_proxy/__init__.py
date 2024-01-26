@@ -37,34 +37,34 @@ class PROXYSERVER(BaseRequestHandler):
         if rec:
             _LOGGER.warning(f"From ECU @{self.client_address[0]}:{myport} - {rec}")
             # Build data dictionary
-            rec = rec.decode('utf-8')
-            if rec[0:7] == "APS18AA":
-                datadict = {"ECU": {"ECU-ID": rec[18:30],
-                    "Current power": int(rec[30:42]) / 100,
-                    "Lifetime Energy": int(rec[42:60]) / 10,
-                    "datetimestamp": str(datetime.strptime(rec[60:74], '%Y%m%d%H%M%S')),
-                    "Online inverters": int(rec[74:77])},
+            decrec = rec.decode('utf-8')
+            if decrec[0:7] == "APS18AA":
+                datadict = {"ECU": {"ECU-ID": decrec[18:30],
+                    "Current power": int(decrec[30:42]) / 100,
+                    "Lifetime Energy": int(decrec[42:60]) / 10,
+                    "datetimestamp": str(datetime.strptime(decrec[60:74], '%Y%m%d%H%M%S')),
+                    "Online inverters": int(decrec[74:77])},
                     "Inverters": []}
 
-                for m in re.finditer('END\d+', rec):
+                for m in re.finditer('END\d+', decrec):
                     datadict["Inverters"].append({
-                        "InverterID": str(rec[m.start()+3:m.start()+15]).strip(),
-                        "Voltage": int(rec[m.start()+17:m.start()+20]),
-                        "Frequency": int(rec[m.start()+20:m.start()+25]) / 10,
-                        "Temperature": int(rec[m.start()+25:m.start()+28]) - 100})
+                        "InverterID": str(decrec[m.start()+3:m.start()+15]).strip(),
+                        "Voltage": int(decrec[m.start()+17:m.start()+20]),
+                        "Frequency": int(decrec[m.start()+20:m.start()+25]) / 10,
+                        "Temperature": int(decrec[m.start()+25:m.start()+28]) - 100})
                 _LOGGER.warning(f"Data = {datadict}")
 
             # forward message to EMA
-            if myport == 8995 or myport == 8996:
-                try:
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    sock.connect(("3.67.1.32", myport)) # don't use ecu.apsystemsema.com due to rewrite it will loop
-                    sock.sendall(rec)
-                    response = sock.recv(1024)
-                    _LOGGER.warning(f"Current power: {int(rec[30:42])/100}W    Response from EMA: {response}\n")
-                    sock.close()
-                    self.request.send(response) # stuur EMA response door naar ECU
-                except Exception as e:
+            #if myport == 8995 or myport == 8996:
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.connect(("3.67.1.32", myport)) # don't use ecu.apsystemsema.com due to rewrite it will loop
+                sock.sendall(rec)
+                response = sock.recv(1024)
+                _LOGGER.warning(f"Response from EMA: {response}\n")
+                sock.close()
+                self.request.send(response) # stuur EMA response door naar ECU
+            except Exception as e:
                     LOGGER.warning(f"Exception error = {e}")
 
 async def async_start_proxy(config: dict):
