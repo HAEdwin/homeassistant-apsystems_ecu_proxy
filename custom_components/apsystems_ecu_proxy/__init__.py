@@ -38,6 +38,7 @@ class PROXYSERVER(BaseRequestHandler):
             _LOGGER.warning(f"From ECU @{self.client_address[0]}:{myport} - {rec}")
             # Build data dictionary
             decrec = rec.decode('utf-8')
+            # walk through the ECU
             if decrec[0:7] == "APS18AA":
                 datadict = {"ECU": {"ECU-ID": decrec[18:30],
                     "Current power": int(decrec[30:42]) / 100,
@@ -45,13 +46,27 @@ class PROXYSERVER(BaseRequestHandler):
                     "datetimestamp": str(datetime.strptime(decrec[60:74], '%Y%m%d%H%M%S')),
                     "Online inverters": int(decrec[74:77])},
                     "Inverters": []}
-
+                # walk through the inverters
+                idx = 0
+                # walk through the inverters
                 for m in re.finditer('END\d+', decrec):
                     datadict["Inverters"].append({
-                        "InverterID": str(decrec[m.start()+3:m.start()+15]).strip(),
+                        "InverterID": str(decrec[m.start()+3:m.start()+15]),
                         "Voltage": int(decrec[m.start()+17:m.start()+20]),
                         "Frequency": int(decrec[m.start()+20:m.start()+25]) / 10,
                         "Temperature": int(decrec[m.start()+25:m.start()+28]) - 100})
+                    # walk through the channels
+                    if str(decrec[m.start()+3:m.start()+15][:3]) in ['406', '407', '408', '409', '703', '706']:
+                        datadict['Inverters'][idx]['Power1'] = str(decrec[m.start()+63:m.start()+66])
+                        datadict['Inverters'][idx]['Power2'] = str(decrec[m.start()+83:m.start()+86])
+
+                    if str(decrec[m.start()+3:m.start()+15][:3]) in ['801', '802', '806']:
+                        datadict['Inverters'][idx]['Power1'] = str(decrec[m.start()+63:m.start()+66])
+                        datadict['Inverters'][idx]['Power2'] = str(decrec[m.start()+83:m.start()+86])
+                        datadict['Inverters'][idx]['Power3'] = str(decrec[m.start()+103:m.start()+106])
+                        datadict['Inverters'][idx]['Power4'] = str(decrec[m.start()+123:m.start()+126])
+                    idx += 1
+#===============================================================================
                 _LOGGER.warning(f"Data = {datadict}")
 
             # forward message to EMA
