@@ -19,7 +19,7 @@ Same goes for the returned data from the EMA site to the ECU device, this needs 
 
 b'APS18AA302AAAAAAA121600006413600000001900000000000000002127920240206112214002000000END4080001111780722800500113000000329000000000001003380050014090170020033900500141901800END80600001122308228005001150000001457000000000010031101000230902900200342012003070038003003340140035690450040032901400343704300END\n
 
-***I converterted the data to look like this in a dictionary:***
+***I converterted the data to look like this in a dictionary that is being updated every 5 minutes:***
 
 {'ECU': {'ECU-ID': '216000064136', 'Current power': 190.0, 'Lifetime Energy': 2127.9, 'datetimestamp': '2024-02-06 11:22:14', 'Online inverters': 2}, 'Inverters': [{'Iid': '408000111178', 'V': 228, 'F': 50.0, 'T': 13, 'DC1': 33.8, 'A1': 4.09, 'P1': '017', 'DC2': 33.9, 'A2': 4.19, 'P2': '018'}, {'Iid': '806000011223', 'V': 228, 'F': 50.0, 'T': 15, 'DC1': 31.1, 'A1': 3.09, 'P1': '029', 'DC2': 34.2, 'A2': 0.7, 'P2': '038', 'DC3': 33.4, 'A3': 5.69, 'P3': '045', 'DC4': 32.9, 'A4': 4.37, 'P4': '043'}]}
 
