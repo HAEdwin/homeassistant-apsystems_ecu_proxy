@@ -40,7 +40,7 @@ async def async_setup_entry(hass: HomeAssistant, config: ConfigType, async_add_e
     
 
 #=========== This part is to dynamically add sensors ? ====================
-class MyCustomSensor(Entity):
+class MyCustomSensor(SensorEntity):
     def __init__(self, sensor_id, sensor_info):
         self._sensor_id = sensor_id
         self._name = sensor_info["name"]
