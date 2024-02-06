@@ -1,10 +1,6 @@
 import logging
-
 import voluptuous as vol
-
 from homeassistant import config_entries, core, exceptions
-
-
 from .const import DOMAIN
 from .__init__ import async_start_proxy, APSystemsECUProxyInvalidData
 
@@ -23,15 +19,14 @@ async def validate_input(hass: core.HomeAssistant, data):
     except APSystemsECUProxyInvalidData as err:
         # raise friendly error after wrong input
         raise CannotConnect
-    return {"title": "APSystems ECU Proxy"}        
+    return {"title": "APSystems ECU Proxy"}
 
 
 class DomainConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for warmup4ie."""
+    """Handle a config flow"""
 
     VERSION = 1
-    # TODO pick one of the available connection classes in homeassistant/config_entries.py
-    CONNECTION_CLASS = config_entries.CONN_CLASS_UNKNOWN
+    CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_POLL
 
     async def async_step_user(self, user_input=None):
         """Handle the initial step."""
