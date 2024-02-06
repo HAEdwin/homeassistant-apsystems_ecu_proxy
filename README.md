@@ -1,6 +1,6 @@
 # APSystems ECU Proxy
 
-### &#x1F534; This integration is under construction - It's my first so be kind ☺️
+### &#x1F534; This integration is under construction - It's my first (and learning) so be kind ☺️
 
 ## Main purpose
 This integration is a HUB and will intercept and route traffic going from the ECU device to the EMA server and vice versa.
