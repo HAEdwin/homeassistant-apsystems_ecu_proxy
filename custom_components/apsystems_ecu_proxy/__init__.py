@@ -45,7 +45,7 @@ class PROXYSERVER(BaseRequestHandler):
                     # walk through the inverters
                     idx = 0
                     # walk through the inverters
-                    for m in re.finditer('END\d+', decrec):
+                    for m in re.finditer(r'END\d+', decrec):
                         datadict["Inverters"].append({
                             "Iid": str(decrec[m.start()+3:m.start()+15]),
                             "V": int(decrec[m.start()+17:m.start()+20]),
