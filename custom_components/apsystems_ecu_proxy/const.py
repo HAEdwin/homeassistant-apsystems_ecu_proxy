@@ -1,1 +1,8 @@
 DOMAIN = "apsystems_ecu_proxy"
+SOLAR_ICON = "mdi:solar-power"
+FREQ_ICON = "mdi:sine-wave"
+RELOAD_ICON = "mdi:reload"
+CACHE_ICON = "mdi:cached"
+RESTART_ICON = "mdi:restart"
+DCVOLTAGE_ICON = "mdi:current-dc"
+POWER_ICON = "mdi:power"
