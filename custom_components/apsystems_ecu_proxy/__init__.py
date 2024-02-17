@@ -3,11 +3,18 @@ import asyncio
 import socket
 import socketserver
 import threading
+from datetime import timedelta
 from socketserver import BaseRequestHandler
 from homeassistant.helpers.entity import Entity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from datetime import datetime
+from homeassistant.helpers.update_coordinator import (
+    CoordinatorEntity,
+    DataUpdateCoordinator,
+    UpdateFailed,
+    )
 import re
 
 from .const import DOMAIN
@@ -15,18 +22,15 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = ["sensor"]
 
-datadict = {}
-datadict["ECU"] = {}
-datadict["Inverters"] = []
-
 class APSystemsECUProxyInvalidData(Exception):
     pass
 
+data = {}
+
+
 class PROXYSERVER(BaseRequestHandler):
     def handle(self):
-#        datadict = {}
-#        datadict["ECU"] = {}
-#        datadict["Inverters"] = []
+        self.ecu_id = None
         (myhost, myport) = self.server.server_address
         rec = self.request.recv(1024)
         try:
@@ -36,49 +40,63 @@ class PROXYSERVER(BaseRequestHandler):
                 decrec = rec.decode('utf-8')
                 # walk through the ECU
                 if decrec[0:7] == "APS18AA":
-                    datadict = {"ECU": {"ECU-ID": decrec[18:30],
-                        "Current power": int(decrec[30:42]) / 100,
-                        "Lifetime Energy": int(decrec[42:60]) / 10,
-                        "datetimestamp": str(datetime.strptime(decrec[60:74], '%Y%m%d%H%M%S')),
-                        "Online inverters": int(decrec[74:77])},
-                        "Inverters": []}
-                    # walk through the inverters
-                    idx = 0
-                    # walk through the inverters
+                    #data = {}
+                    data["timestamp"] = str(datetime.strptime(decrec[60:74], '%Y%m%d%H%M%S'))
+                    data["inverters"] = {}
+                    inverters = {}
                     for m in re.finditer(r'END\d+', decrec):
-                        datadict["Inverters"].append({
-                            "Iid": str(decrec[m.start()+3:m.start()+15]),
-                            "V": int(decrec[m.start()+17:m.start()+20]),
-                            "F": int(decrec[m.start()+20:m.start()+25]) / 10,
-                            "T": int(decrec[m.start()+25:m.start()+28]) - 100})
-                        # walk through the channels of 2-channel inverters
-                        if str(decrec[m.start()+3:m.start()+15][:3]) in ['406', '407', '408', '409', '703', '706']:
-                            datadict['Inverters'][idx]['DC1'] = int(decrec[m.start()+51:m.start()+54]) / 10
-                            datadict['Inverters'][idx]['A1'] = int(decrec[m.start()+60:m.start()+63]) / 100
-                            datadict['Inverters'][idx]['P1'] = str(decrec[m.start()+63:m.start()+66])
-                            datadict['Inverters'][idx]['DC2'] = int(decrec[m.start()+71:m.start()+74]) / 10
-                            datadict['Inverters'][idx]['A2'] = int(decrec[m.start()+80:m.start()+83]) / 100
-                            datadict['Inverters'][idx]['P2'] = str(decrec[m.start()+83:m.start()+86])
-                        # walk through the channels of 4-channel inverters
-                        if str(decrec[m.start()+3:m.start()+15][:3]) in ['801', '802', '806']:
-                            datadict['Inverters'][idx]['DC1'] = int(decrec[m.start()+51:m.start()+54]) / 10
-                            datadict['Inverters'][idx]['A1'] = int(decrec[m.start()+60:m.start()+63]) / 100
-                            datadict['Inverters'][idx]['P1'] = str(decrec[m.start()+63:m.start()+66])
-
-                            datadict['Inverters'][idx]['DC2'] = int(decrec[m.start()+71:m.start()+74]) / 10
-                            datadict['Inverters'][idx]['A2'] = int(decrec[m.start()+80:m.start()+83]) / 100
-                            datadict['Inverters'][idx]['P2'] = str(decrec[m.start()+83:m.start()+86])
-
-                            datadict['Inverters'][idx]['DC3'] = int(decrec[m.start()+91:m.start()+94]) / 10
-                            datadict['Inverters'][idx]['A3'] = int(decrec[m.start()+100:m.start()+103]) / 100
-                            datadict['Inverters'][idx]['P3'] = str(decrec[m.start()+103:m.start()+106])
-
-                            datadict['Inverters'][idx]['DC4'] = int(decrec[m.start()+111:m.start()+114]) / 10
-                            datadict['Inverters'][idx]['A4'] = int(decrec[m.start()+120:m.start()+123]) / 100
-                            datadict['Inverters'][idx]['P4'] = str(decrec[m.start()+123:m.start()+126])
-                        idx += 1
-                    _LOGGER.warning (f"Data Dictionary = {datadict}")
-                    #ECUProxySensor(ecu_proxy_current_power) == int(decrec[30:42]) / 100
+                        inv={}
+                        inverter_uid = str(decrec[m.start()+3:m.start()+15])
+                        inv["uid"] = str(decrec[m.start()+3:m.start()+15])
+                        inv["temperature"] = int(decrec[m.start()+25:m.start()+28]) - 100
+                        inv["frequency"] = int(decrec[m.start()+20:m.start()+25]) / 10
+                        if str(decrec[m.start()+3:m.start()+6]) in ['406', '407', '408', '409', '703', '706']:
+                            inv["model"] = "YC600/DS3 series"
+                            inv["channel_qty"] = 2
+                            power = []
+                            voltage = []
+                            current = []
+                            power.append(int(decrec[m.start()+63:m.start()+66]))
+                            power.append(int(decrec[m.start()+83:m.start()+86]))
+                            inv.update({"power": power})
+                            voltage.append(int(decrec[m.start()+51:m.start()+54]) / 10)
+                            voltage.append(int(decrec[m.start()+71:m.start()+74]) / 10)
+                            inv.update({"voltage": voltage})
+                            current.append(int(decrec[m.start()+60:m.start()+63]) / 100)
+                            current.append(int(decrec[m.start()+80:m.start()+83]) / 100)
+                            inv.update({"current": current})
+                        else:
+                            if str(decrec[m.start()+3:m.start()+6]) in ['801', '802', '806']:
+                                inv["model"] = "QS1"
+                            if str(decrec[m.start()+3:m.start()+6]) in ['501', '502', '503', '504']:
+                                inv["model"] = "YC1000/QT2"
+                            inv["channel_qty"] = 4
+                            power = []
+                            voltage = []
+                            current = []
+                            power.append(int(decrec[m.start()+63:m.start()+66]))
+                            power.append(int(decrec[m.start()+83:m.start()+86]))
+                            power.append(int(decrec[m.start()+103:m.start()+106]))
+                            power.append(int(decrec[m.start()+123:m.start()+126]))
+                            inv.update({"power": power})
+                            voltage.append(int(decrec[m.start()+51:m.start()+54]) / 10)
+                            voltage.append(int(decrec[m.start()+71:m.start()+74]) / 10)
+                            voltage.append(int(decrec[m.start()+91:m.start()+94]) / 10)
+                            voltage.append(int(decrec[m.start()+111:m.start()+114]) / 10)
+                            inv.update({"voltage": voltage})
+                            current.append(int(decrec[m.start()+60:m.start()+63]) / 100)
+                            current.append(int(decrec[m.start()+80:m.start()+83]) / 100)
+                            current.append(int(decrec[m.start()+100:m.start()+103]) / 100)
+                            current.append(int(decrec[m.start()+120:m.start()+123]) / 100)
+                            inv.update({"current": current})
+                        inverters[inverter_uid] = inv
+                    data["inverters"] = inverters
+                    data["ecu-id"] = decrec[18:30]
+                    self.ecu_id = decrec[18:30]
+                    data["lifetime_energy"] = int(decrec[42:60]) / 10
+                    data["current_power"] = int(decrec[30:42]) / 100
+                    data["qty_of_online_inverters"] = int(decrec[74:77])
+                    _LOGGER.warning (f"Data Dictionary = {data}")
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.connect(("3.67.1.32", myport)) # don't use ecu.apsystemsema.com or it will loop
             sock.sendall(rec)
@@ -88,8 +106,13 @@ class PROXYSERVER(BaseRequestHandler):
             self.request.send(response)
         except Exception as e:
             LOGGER.warning(f"Exception error = {e}")
+            
 
-
+#=============== zelf toegevoegd ===============================================
+def my_update():
+    _LOGGER.warning(f"Update: {data}")
+    return data
+#===============================================================================
 async def async_start_proxy(config: dict):
     """Setup the listeners and threads."""
     host = config['host']
@@ -111,18 +134,27 @@ async def async_start_proxy(config: dict):
         else:
             raise APSystemsECUProxyInvalidData(err)
 
-#========= part to create the sensors dynamically? =================
-#async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
-#    sensors = []
-#    async_add_entities(sensors)
-#    _LOGGER.warning("hello world")
-#===============================================================================
-
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     data_dict = entry.as_dict().get('data', {})
     _LOGGER.warning(f"Step 4: after HA restart, start proxy: {data_dict}")
-    await async_start_proxy(data_dict)
+    ecu = PROXYSERVER
     
+    
+    async def do_ecu_update():
+        return await hass.async_add_executor_job(my_update)
+    
+    coordinator = DataUpdateCoordinator(
+            hass,
+            _LOGGER,
+            name=DOMAIN,
+            update_method=do_ecu_update,
+            update_interval=timedelta(seconds=30),
+    )
+    await async_start_proxy(data_dict)
+    hass.data[DOMAIN] = {
+        "ecu" : ecu,
+        "coordinator" : coordinator
+    }
     for component in PLATFORMS:
         hass.async_create_task(
             hass.config_entries.async_forward_entry_setup(entry, component)
