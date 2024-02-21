@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-
-from datetime import timedelta, datetime, date
 import logging
-
 import async_timeout
 
+from datetime import timedelta, datetime, date
 from homeassistant.util import dt as dt_util
-from homeassistant.components.sensor import SensorEntity
-from homeassistant.helpers.entity import EntityCategory
+
+from homeassistant.helpers.entity import Entity, EntityCategory
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
 )
@@ -16,43 +17,28 @@ from homeassistant.helpers.update_coordinator import (
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
-    SensorStateClass,
+    SensorStateClass
 )
-
 
 from .const import (
     DOMAIN,
     SOLAR_ICON,
     FREQ_ICON,
-    DCVOLTAGE_ICON,
+    DCVOLTAGE_ICON
 )
-
-
 
 from homeassistant.const import (
     UnitOfPower,
     UnitOfEnergy,
     UnitOfTemperature,
     UnitOfElectricPotential,
-    UnitOfFrequency,
-    UnitOfElectricCurrent
+    UnitOfElectricCurrent,    
+    UnitOfFrequency
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 #===============================================================================
-
-
-
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
-from homeassistant.helpers.entity import Entity
-
-
-
-
-
 
 
 async def async_setup_entry(hass, config, add_entities, discovery_info=None):
