@@ -35,7 +35,7 @@ from homeassistant.const import (
     UnitOfTemperature,
     UnitOfElectricPotential,
     UnitOfFrequency,
-    PERCENTAGE
+    UnitOfElectricCurrent
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -104,7 +104,6 @@ async def async_setup_entry(hass, config, add_entities, discovery_info=None):
         inverters = coordinator.data.get("inverters", {})
         for uid,inv_data in inverters.items():
             _LOGGER.debug(f"Inverter {uid} {inv_data.get('channel_qty')}")
-            # https://github.com/ksheumaker/homeassistant-apsystems_ecur/issues/110
             if inv_data.get("channel_qty") != None:
                 sensors.extend([
                         APSystemsECUInverterSensor(coordinator, ecu, uid, "temperature",
@@ -122,13 +121,21 @@ async def async_setup_entry(hass, config, add_entities, discovery_info=None):
                             icon=FREQ_ICON,
                             entity_category=EntityCategory.DIAGNOSTIC
                         ),
+                        APSystemsECUInverterSensor(coordinator, ecu, uid, "current",
+                            index=i, label=f"Current Ch {i+1}",
+                            unit=UnitOfElectricCurrent.AMPERE,
+                            devclass=SensorDeviceClass.CURRENT,
+                            icon=DCVOLTAGE_ICON,
+                            stateclass=SensorStateClass.MEASUREMENT,
+                            entity_category=EntityCategory.DIAGNOSTIC
+                        ),
                         APSystemsECUInverterSensor(coordinator, ecu, uid, "voltage",
                             label="Voltage",
                             unit=UnitOfElectricPotential.VOLT,
                             icon=DCVOLTAGE_ICON,
                             stateclass=SensorStateClass.MEASUREMENT,
                             devclass=SensorDeviceClass.VOLTAGE, entity_category=EntityCategory.DIAGNOSTIC
-                        ),
+                        )
                 ])
                 for i in range(0, inv_data.get("channel_qty", 0)):
                     sensors.append(
@@ -187,8 +194,9 @@ class APSystemsECUInverterSensor(CoordinatorEntity, SensorEntity):
         if self._field == "voltage":
             return self.coordinator.data.get("inverters", {}).get(self._uid, {}).get("voltage", [])[self._index]
         elif self._field == "power":
-            _LOGGER.debug(f"POWER  {self._uid} {self._index}")
             return self.coordinator.data.get("inverters", {}).get(self._uid, {}).get("power", [])[self._index]
+        elif self._field == "current":
+            return self.coordinator.data.get("inverters", {}).get(self._uid, {}).get("current", [])[self._index]
         else:
             return self.coordinator.data.get("inverters", {}).get(self._uid, {}).get(self._field)
 
