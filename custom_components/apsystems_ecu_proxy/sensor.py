@@ -32,7 +32,7 @@ from homeassistant.const import (
     UnitOfEnergy,
     UnitOfTemperature,
     UnitOfElectricPotential,
-    UnitOfElectricCurrent,    
+    UnitOfElectricCurrent,
     UnitOfFrequency
 )
 
