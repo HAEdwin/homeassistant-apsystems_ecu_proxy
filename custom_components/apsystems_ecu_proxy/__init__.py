@@ -27,7 +27,7 @@ class APSystemsECUProxyInvalidData(Exception):
 
 data = {}
 
-
+# dit deel werkt
 class PROXYSERVER(BaseRequestHandler):
     def handle(self):
         self.ecu_id = None
@@ -93,6 +93,15 @@ class PROXYSERVER(BaseRequestHandler):
                     data["inverters"] = inverters
                     data["ecu-id"] = decrec[18:30]
                     self.ecu_id = decrec[18:30]
+                    if data["ecu-id"][:4] == "2160":
+                        data["model"] = "ECU-R"
+                    if data["ecu-id"][:4] == "2162":
+                        data["model"] = "ECU-R pro"
+                    if data["ecu-id"][:4] == "2163":
+                        data["model"] = "ECU-B"
+                    if data["ecu-id"][:3] == "215":
+                        data["model"] = "ECU-C"
+                    self.ecu_id = decrec[18:30]
                     data["lifetime_energy"] = int(decrec[42:60]) / 10
                     data["current_power"] = int(decrec[30:42]) / 100
                     data["qty_of_online_inverters"] = int(decrec[74:77])
@@ -106,11 +115,10 @@ class PROXYSERVER(BaseRequestHandler):
             self.request.send(response)
         except Exception as e:
             LOGGER.warning(f"Exception error = {e}")
-            
 
 #=============== zelf toegevoegd ===============================================
 def my_update():
-    _LOGGER.warning(f"Update: {data}")
+    _LOGGER.debug(f"Update: {data}")
     return data
 #===============================================================================
 async def async_start_proxy(config: dict):
@@ -121,7 +129,7 @@ async def async_start_proxy(config: dict):
         thread_1 = threading.Thread(target=listener_1.serve_forever)
         listener_2 = socketserver.TCPServer((host, 8996), PROXYSERVER)
         thread_2 = threading.Thread(target=listener_2.serve_forever)
-        listener_4 = socketserver.TCPServer((host, 9220), PROXYSERVER)
+        listener_4 = socketserver.TCPServer((host, 8997), PROXYSERVER)
         thread_4 = threading.Thread(target=listener_4.serve_forever)
         for threads in thread_1, thread_2, thread_4:
             threads.start()
@@ -135,31 +143,71 @@ async def async_start_proxy(config: dict):
             raise APSystemsECUProxyInvalidData(err)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
+#async def async_setup_entry(hass, entry, async_add_entities): laatste AI aanbeveling
+
+    # haal de server parameters op en start de proxy
     data_dict = entry.as_dict().get('data', {})
-    _LOGGER.warning(f"Step 4: after HA restart, start proxy: {data_dict}")
+    await async_start_proxy(data_dict)
+
+    # maak een object van PROXYSERVER
     ecu = PROXYSERVER
-    
-    
     async def do_ecu_update():
+        while not data:
+            await asyncio.sleep(10)  # Check every 10 second for filled dict
+            _LOGGER.debug("Waiting for data...")
         return await hass.async_add_executor_job(my_update)
-    
+
     coordinator = DataUpdateCoordinator(
             hass,
             _LOGGER,
             name=DOMAIN,
             update_method=do_ecu_update,
-            update_interval=timedelta(seconds=30),
+            update_interval=timedelta(seconds=60)
     )
-    await async_start_proxy(data_dict)
+
+    _LOGGER.debug("Waiting for first data...")
+    await coordinator.async_config_entry_first_refresh()
+    
     hass.data[DOMAIN] = {
         "ecu" : ecu,
         "coordinator" : coordinator
     }
-    for component in PLATFORMS:
-        hass.async_create_task(
-            hass.config_entries.async_forward_entry_setup(entry, component)
+
+#    Hier wordt de ECU geregistreerd voor de UI (nog debuggen)
+    device_registry = dr.async_get(hass)
+    device_registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, f"ecu_{coordinator.data.get('ecu-id')}")},
+        manufacturer="APSystems",
+        suggested_area="Roof",
+        name=f"ECU {coordinator.data.get('ecu-id')}",
+        model=f"{coordinator.data.get('model')}",
         )
+
+    inverters = coordinator.data.get("inverters", {})
+    for uid,inv_data in inverters.items():
+        model = inv_data.get("model", "Inverter")
+        device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, f"inverter_{uid}")},
+            manufacturer="APSystems",
+            suggested_area="Roof",
+            name=f"Inverter {uid}",
+            model=inv_data.get("model")
+        )
+
+#   dit deel komt uit de ECUR integratie  ==
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    _LOGGER.warning("First data received...")
     return True
+#===========================================
+
+#    for component in PLATFORMS:
+#        hass.async_create_task(
+#            hass.config_entries.async_forward_entry_setups(entry, component)
+#        )
+#    _LOGGER.warning("First data received...")
+#    return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Unload a config entry."""
@@ -172,3 +220,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
         )
     )
     return unload_ok
+
+async def async_remove_config_entry_device(hass, config, device_entry) -> bool:
+    if device_entry is not None:
+        # Notify the user that the device has been removed
+        hass.components.persistent_notification.async_create(
+            f"The following device was removed from the system: {device_entry}",
+            title="Device Removed",
+        )
+        return True
+    else:
+        return False
