@@ -114,7 +114,7 @@ class PROXYSERVER(BaseRequestHandler):
             sock.close()
             self.request.send(response)
         except Exception as e:
-            LOGGER.warning(f"Exception error = {e}")
+            _LOGGER.warning(f"Exception error = {e}")
 
 #=============== zelf toegevoegd ===============================================
 def my_update():
