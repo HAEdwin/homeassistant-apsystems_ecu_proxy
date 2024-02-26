@@ -1,26 +1,26 @@
+"""Config flow to setup component"""
 import logging
 import voluptuous as vol
-from homeassistant import config_entries, core, exceptions
+from homeassistant import config_entries, exceptions
 from .const import DOMAIN
-from .__init__ import async_start_proxy, APSystemsECUProxyInvalidData
+from .__init__ import APSystemsECUProxyInvalidData, async_setup_entry
 
 
 _LOGGER = logging.getLogger(__name__)
 
-# Schema heeft alleen de naam van de host nog niets anders
+# Schema contains name of host only
 DATA_SCHEMA = vol.Schema({"host": str})
 
 
-async def validate_input(hass: core.HomeAssistant, data):
+async def validate_input(data):
     """Validate the user input allows us to connect."""
-    _LOGGER.debug(f"step 1: validate_input from config_flow.py data={data}")
+    _LOGGER.debug("step 1: validate_input from config_flow.py data = %s",data)
     try:
-        await async_start_proxy(data)
+        async_setup_entry
     except APSystemsECUProxyInvalidData as err:
         # raise friendly error after wrong input
-        raise CannotConnect
+        raise CannotConnect from err
     return {"title": "APSystems ECU Proxy"}
-
 
 class DomainConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow"""
@@ -37,8 +37,7 @@ class DomainConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Validate user input
         if user_input is not None:
             try:
-                info = await validate_input(self.hass, user_input)
-
+                info = await validate_input(user_input)
                 return self.async_create_entry(title=info["title"], data=user_input)
             except CannotConnect:
                 errors["base"] = "cannot_connect"
