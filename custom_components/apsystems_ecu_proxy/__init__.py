@@ -1,125 +1,110 @@
+""" Initialise Module for ECU Proxy """
+
 import logging
 import asyncio
 import socket
 import socketserver
 import threading
-from datetime import timedelta
+import traceback
+import re
+from datetime import timedelta, datetime
 from socketserver import BaseRequestHandler
 from homeassistant.helpers.entity import Entity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
-from datetime import datetime
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
     DataUpdateCoordinator,
     UpdateFailed,
     )
-import re
-
 from .const import DOMAIN
-_LOGGER = logging.getLogger(__name__)
 
+_LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor"]
 
 class APSystemsECUProxyInvalidData(Exception):
-    pass
+    """ Class provides passforward for error massages """
+    #pass (advies Pylint om weg te halen)
 
 data = {}
 
 # dit deel werkt
 class PROXYSERVER(BaseRequestHandler):
+    """ Class provides data dictionary """
     def handle(self):
         self.ecu_id = None
         (myhost, myport) = self.server.server_address
         rec = self.request.recv(1024)
         try:
-            if rec:
-                _LOGGER.warning(f"From ECU @{myhost}:{myport} - {rec}")
-                # Build data dictionary
-                decrec = rec.decode('utf-8')
-                # walk through the ECU
-                if decrec[0:7] == "APS18AA":
-                    #data = {}
-                    data["timestamp"] = str(datetime.strptime(decrec[60:74], '%Y%m%d%H%M%S'))
-                    data["inverters"] = {}
-                    inverters = {}
-                    for m in re.finditer(r'END\d+', decrec):
-                        inv={}
-                        inverter_uid = str(decrec[m.start()+3:m.start()+15])
-                        inv["uid"] = str(decrec[m.start()+3:m.start()+15])
-                        inv["temperature"] = int(decrec[m.start()+25:m.start()+28]) - 100
-                        inv["frequency"] = int(decrec[m.start()+20:m.start()+25]) / 10
-                        if str(decrec[m.start()+3:m.start()+6]) in ['406', '407', '408', '409', '703', '706']:
-                            inv["model"] = "YC600/DS3 series"
-                            inv["channel_qty"] = 2
-                            power = []
-                            voltage = []
-                            current = []
-                            power.append(int(decrec[m.start()+63:m.start()+66]))
-                            power.append(int(decrec[m.start()+83:m.start()+86]))
-                            inv.update({"power": power})
-                            voltage.append(int(decrec[m.start()+51:m.start()+54]) / 10)
-                            voltage.append(int(decrec[m.start()+71:m.start()+74]) / 10)
-                            inv.update({"voltage": voltage})
-                            current.append(int(decrec[m.start()+60:m.start()+63]) / 100)
-                            current.append(int(decrec[m.start()+80:m.start()+83]) / 100)
-                            inv.update({"current": current})
-                        else:
-                            if str(decrec[m.start()+3:m.start()+6]) in ['801', '802', '806']:
-                                inv["model"] = "QS1"
-                            if str(decrec[m.start()+3:m.start()+6]) in ['501', '502', '503', '504']:
-                                inv["model"] = "YC1000/QT2"
-                            inv["channel_qty"] = 4
-                            power = []
-                            voltage = []
-                            current = []
-                            power.append(int(decrec[m.start()+63:m.start()+66]))
-                            power.append(int(decrec[m.start()+83:m.start()+86]))
-                            power.append(int(decrec[m.start()+103:m.start()+106]))
-                            power.append(int(decrec[m.start()+123:m.start()+126]))
-                            inv.update({"power": power})
-                            voltage.append(int(decrec[m.start()+51:m.start()+54]) / 10)
-                            voltage.append(int(decrec[m.start()+71:m.start()+74]) / 10)
-                            voltage.append(int(decrec[m.start()+91:m.start()+94]) / 10)
-                            voltage.append(int(decrec[m.start()+111:m.start()+114]) / 10)
-                            inv.update({"voltage": voltage})
-                            current.append(int(decrec[m.start()+60:m.start()+63]) / 100)
-                            current.append(int(decrec[m.start()+80:m.start()+83]) / 100)
-                            current.append(int(decrec[m.start()+100:m.start()+103]) / 100)
-                            current.append(int(decrec[m.start()+120:m.start()+123]) / 100)
-                            inv.update({"current": current})
-                        inverters[inverter_uid] = inv
-                    data["inverters"] = inverters
-                    data["ecu-id"] = decrec[18:30]
-                    self.ecu_id = decrec[18:30]
-                    if data["ecu-id"][:4] == "2160":
-                        data["model"] = "ECU-R"
-                    if data["ecu-id"][:4] == "2162":
-                        data["model"] = "ECU-R pro"
-                    if data["ecu-id"][:4] == "2163":
-                        data["model"] = "ECU-B"
-                    if data["ecu-id"][:3] == "215":
-                        data["model"] = "ECU-C"
-                    self.ecu_id = decrec[18:30]
-                    data["lifetime_energy"] = int(decrec[42:60]) / 10
-                    data["current_power"] = int(decrec[30:42]) / 100
-                    data["qty_of_online_inverters"] = int(decrec[74:77])
-                    _LOGGER.warning (f"Data Dictionary = {data}")
+            _LOGGER.warning(f"From ECU @{myhost}:{myport} - {rec}")
+            decrec = rec.decode('utf-8')
+
+            if decrec[0:7] == "APS18AA": # walk through the ECU
+                data["timestamp"] = str(datetime.strptime(decrec[60:74], '%Y%m%d%H%M%S'))
+                data["ecu-id"] = decrec[18:30]
+                if data["ecu-id"][:4] == "2160":
+                    data["model"] = "ECU-R"
+                if data["ecu-id"][:4] == "2162":
+                    data["model"] = "ECU-R pro"
+                if data["ecu-id"][:4] == "2163":
+                    data["model"] = "ECU-B"
+                if data["ecu-id"][:3] == "215":
+                    data["model"] = "ECU-C"
+                data["lifetime_energy"] = int(decrec[42:60]) / 10
+                data["current_power"] = int(decrec[30:42]) / 100
+                data["qty_of_online_inverters"] = int(decrec[74:77])
+                inverters = {}
+                for m in re.finditer(r'END\d+', decrec): # walk through inverters
+                    inv={}
+                    inverter_uid = str(decrec[m.start()+3:m.start()+15])
+                    inv["uid"] = str(decrec[m.start()+3:m.start()+15])
+                    inv["temperature"] = int(decrec[m.start()+25:m.start()+28]) - 100
+                    inv["frequency"] = int(decrec[m.start()+20:m.start()+25]) / 10
+                    if str(decrec[m.start() + 3:m.start() + 6]) in [
+                            '406', '407', '408', '409', '703', '706'
+                            ]:
+                        inv.update({"model": "YC600/DS3 series", "channel_qty": 2})
+                        power = [int(decrec[m.start() + 63:m.start() + 66]),
+                            int(decrec[m.start() + 83:m.start() + 86])]
+                        voltage = [int(decrec[m.start() + 51:m.start() + 54])
+                            / 10, int(decrec[m.start() + 71:m.start() + 74]) / 10]
+                        current = [int(decrec[m.start() + 60:m.start() + 63])
+                            / 100, int(decrec[m.start() + 80:m.start() + 83]) / 100]
+                        inv.update({"power": power, "voltage": voltage, "current": current})
+                    else:
+                        if str(decrec[m.start() + 3:m.start() + 6]) in ['801', '802', '806']:
+                            inv.update({"model": "QS1", "channel_qty": 4})
+                        elif str(decrec[m.start() + 3:m.start() + 6]) in [
+                                '501', '502', '503', '504'
+                                ]:
+                            inv.update({"model": "YC1000/QT2", "channel_qty": 4})
+                        power = [int(decrec[m.start() + offset:m.start() + offset + 3])
+                            for offset in range(63, 127, 20)]
+                        voltage = [int(decrec[m.start() + offset:m.start() + offset + 3]) / 10
+                            for offset in range(51, 114, 20)]
+                        current = [int(decrec[m.start() + offset:m.start() + offset + 3]) / 100
+                            for offset in range(60, 123, 20)]
+                        inv.update({"power": power, "voltage": voltage, "current": current})
+                    inverters[inverter_uid] = inv
+                data["inverters"] = inverters
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.connect(("3.67.1.32", myport)) # don't use ecu.apsystemsema.com or it will loop
             sock.sendall(rec)
             response = sock.recv(1024)
-            _LOGGER.warning(f"Response from EMA: {response}\n")
+            _LOGGER.warning(f"Response from EMA: {response}")
             sock.close()
             self.request.send(response)
-        except Exception as e:
-            _LOGGER.warning(f"Exception error = {e}")
+            _LOGGER.warning(f"Returning data: {data}\n")
+        except Exception:
+            _LOGGER.warning(f"Exception error = {traceback.format_exc()}")
 
 #=============== zelf toegevoegd ===============================================
 def my_update():
+    """ Get updated data """
     _LOGGER.debug(f"Update: {data}")
     return data
+
 #===============================================================================
 async def async_start_proxy(config: dict):
     """Setup the listeners and threads."""
@@ -143,9 +128,8 @@ async def async_start_proxy(config: dict):
             raise APSystemsECUProxyInvalidData(err)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
-#async def async_setup_entry(hass, entry, async_add_entities): laatste AI aanbeveling
 
-    # haal de server parameters op en start de proxy
+    """ Get server params and start Proxy """
     data_dict = entry.as_dict().get('data', {})
     await async_start_proxy(data_dict)
 
@@ -162,18 +146,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             _LOGGER,
             name=DOMAIN,
             update_method=do_ecu_update,
-            update_interval=timedelta(seconds=60)
+            update_interval=timedelta(seconds=10)
     )
 
     _LOGGER.debug("Waiting for first data...")
     await coordinator.async_config_entry_first_refresh()
-    
+
     hass.data[DOMAIN] = {
         "ecu" : ecu,
         "coordinator" : coordinator
     }
 
-#    Hier wordt de ECU geregistreerd voor de UI (nog debuggen)
+    # Register the ECU and inverter(s)
     device_registry = dr.async_get(hass)
     device_registry.async_get_or_create(
         config_entry_id=entry.entry_id,
@@ -186,7 +170,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     inverters = coordinator.data.get("inverters", {})
     for uid,inv_data in inverters.items():
-        model = inv_data.get("model", "Inverter")
         device_registry.async_get_or_create(
             config_entry_id=entry.entry_id,
             identifiers={(DOMAIN, f"inverter_{uid}")},
@@ -196,18 +179,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             model=inv_data.get("model")
         )
 
-#   dit deel komt uit de ECUR integratie  ==
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _LOGGER.warning("First data received...")
     return True
-#===========================================
-
-#    for component in PLATFORMS:
-#        hass.async_create_task(
-#            hass.config_entries.async_forward_entry_setups(entry, component)
-#        )
-#    _LOGGER.warning("First data received...")
-#    return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Unload a config entry."""
@@ -221,7 +195,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     )
     return unload_ok
 
+# Enables users to delete a device
 async def async_remove_config_entry_device(hass, config, device_entry) -> bool:
+    """ Function to remove inividual devices from the integration (ok) """
     if device_entry is not None:
         # Notify the user that the device has been removed
         hass.components.persistent_notification.async_create(
@@ -229,5 +205,3 @@ async def async_remove_config_entry_device(hass, config, device_entry) -> bool:
             title="Device Removed",
         )
         return True
-    else:
-        return False
