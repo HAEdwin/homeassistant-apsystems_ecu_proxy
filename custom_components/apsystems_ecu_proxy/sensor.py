@@ -44,11 +44,9 @@ async def async_setup_entry(hass, config, add_entities, discovery_info=None):
     #_LOGGER.warning(f"attributes:{instance_attributes}")
     
     inverters = coordinator.data.get("inverters", {})
-    
     ecu_id = coordinator.data.get("ecu-id")
     #vanaf hier moeten alle gegevens bekend zijn! coordinator.data bevat de volledige datadictionary
-    
-    
+
     if not coordinator.data:
         _LOGGER.warning("Tijdelijke dummy data ingezet")
         coordinator.data = {'timestamp': None, 'inverters': {None: {'uid': None, 'temperature': None, 'frequency': None, 'model': None, 'channel_qty': None, 'power': [None, None], 'voltage': [None, None], 'current': [None, None]}}, 'ecu-id': None, 'lifetime_energy': None, 'current_power': None, 'qty_of_online_inverters': None}
@@ -83,9 +81,6 @@ async def async_setup_entry(hass, config, add_entities, discovery_info=None):
         ),
     ]
 
-    
-    # als ik onderstaande regel weg haal, dan wordt er geen update meer gedaan en zijn de entities niet aangemaakt (hier komt ie eenmalig)
-    #coordinator.data = {'timestamp': '2024-02-15 11:26:49', 'inverters': {'408000111074': {'uid': '408000111074', 'temperature': 16, 'frequency': 50.0, 'model': 'YC600/DS3 series', 'channel_qty': 2, 'power': [29, 29], 'voltage': [34.3, 34.0], 'current': [3.2, 3.38]}, '806000011026': {'uid': '806000011026', 'temperature': 16, 'frequency': 50.0, 'model': 'QS1', 'channel_qty': 4, 'power': [45, 54, 59, 52], 'voltage': [33.7, 33.8, 33.2, 33.2], 'current': [5.73, 3.0, 7.48, 1.17]}}, 'ecu-id': '216000064240', 'lifetime_energy': 2139.1, 'current_power': 268.0, 'qty_of_online_inverters': 2}
     if coordinator.data:
         inverters = coordinator.data.get("inverters", {})
         for uid,inv_data in inverters.items():
@@ -138,65 +133,7 @@ async def async_setup_entry(hass, config, add_entities, discovery_info=None):
                             entity_category=EntityCategory.DIAGNOSTIC
                         ),
                     )
-                        
         add_entities(sensors)
-    
-    
-    
-    
-    
-#    for uid,inv_data in inverters.items():
-#        _LOGGER.debug(f"Inverter {uid} {inv_data.get('channel_qty')}")
-#        # https://github.com/ksheumaker/homeassistant-apsystems_ecur/issues/110
-#        if inv_data.get("channel_qty") != None:
-#            sensors.extend([
-#                    APSystemsECUInverterSensor(coordinator, ecu, uid, "temperature",
-#                        label="Temperature",
-#                        unit=UnitOfTemperature.CELSIUS,
-#                        devclass=SensorDeviceClass.TEMPERATURE,
-#                        stateclass=SensorStateClass.MEASUREMENT,
-#                        entity_category=EntityCategory.DIAGNOSTIC
-#                    ),
-#                    APSystemsECUInverterSensor(coordinator, ecu, uid, "frequency",
-#                        label="Frequency",
-#                        unit=UnitOfFrequency.HERTZ,
-#                        stateclass=SensorStateClass.MEASUREMENT,
-#                        devclass=SensorDeviceClass.FREQUENCY,
-#                        icon=FREQ_ICON,
-#                        entity_category=EntityCategory.DIAGNOSTIC
-#                    ),
-#            ])
-#            for i in range(0, inv_data.get("channel_qty", 0)):
-#                sensors.append(
-#                    APSystemsECUInverterSensor(coordinator, ecu, uid, f"power", 
-#                        index=i, label=f"Power Ch {i+1}",
-#                        unit=UnitOfPower.WATT,
-#                        devclass=SensorDeviceClass.POWER,
-#                        icon=SOLAR_ICON,
-#                        stateclass=SensorStateClass.MEASUREMENT
-#                    ),
-#                )
-#                sensors.append(
-#                    APSystemsECUInverterSensor(coordinator, ecu, uid, "current",
-#                        index=i, label=f"Current Ch {i+1}",
-#                        unit=UnitOfElectricCurrent.AMPERE,
-#                        devclass=SensorDeviceClass.CURRENT,
-#                        icon=DCVOLTAGE_ICON,
-#                        stateclass=SensorStateClass.MEASUREMENT,
-#                        entity_category=EntityCategory.DIAGNOSTIC
-#                    ),
-#                )
-#                sensors.append(
-#                    APSystemsECUInverterSensor(coordinator, ecu, uid, "voltage",
-#                        index=i, label=f"Voltage Ch {i+1}",
-#                        unit=UnitOfElectricPotential.VOLT,
-#                        devclass=SensorDeviceClass.VOLTAGE,
-#                        icon=DCVOLTAGE_ICON,
-#                        stateclass=SensorStateClass.MEASUREMENT,
-#                        entity_category=EntityCategory.DIAGNOSTIC
-#                    ),
-#                )
-#    add_entities(sensors)
 
 class APSystemsECUInverterSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator, ecu, uid, field, index=0, label=None, icon=None, unit=None, devclass=None, stateclass=None, entity_category=None):
@@ -237,14 +174,18 @@ class APSystemsECUInverterSensor(CoordinatorEntity, SensorEntity):
     @property
     def state(self):
         _LOGGER.debug(f"State called for {self._field}")
-        if self._field == "voltage":
-            return self.coordinator.data.get("inverters", {}).get(self._uid, {}).get("voltage", [])[self._index]
-        elif self._field == "power":
-            return self.coordinator.data.get("inverters", {}).get(self._uid, {}).get("power", [])[self._index]
-        elif self._field == "current":
-            return self.coordinator.data.get("inverters", {}).get(self._uid, {}).get("current", [])[self._index]
-        else:
-            return self.coordinator.data.get("inverters", {}).get(self._uid, {}).get(self._field)
+        try:
+            match self._field:
+                case "voltage":
+                    return self.coordinator.data.get("inverters", {}).get(self._uid, {}).get("voltage", [])[self._index]
+                case "power":
+                    return self.coordinator.data.get("inverters", {}).get(self._uid, {}).get("power", [])[self._index]
+                case "current":
+                    return self.coordinator.data.get("inverters", {}).get(self._uid, {}).get("current", [])[self._index]
+                case _:
+                    return self.coordinator.data.get("inverters", {}).get(self._uid, {}).get(self._field)
+        except Exception:
+            pass
 
     @property
     def icon(self):
@@ -253,7 +194,6 @@ class APSystemsECUInverterSensor(CoordinatorEntity, SensorEntity):
     @property
     def unit_of_measurement(self):
         return self._unit
-
 
     @property
     def extra_state_attributes(self):
