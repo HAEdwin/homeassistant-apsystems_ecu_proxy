@@ -27,33 +27,33 @@ class APSystemsECUProxyInvalidData(Exception):
     """ Class provides passforward for error massages """
     #pass (advies Pylint om weg te halen)
 
-data = {}
+ecu_data = {}
 
 # dit deel werkt
 class PROXYSERVER(BaseRequestHandler):
-    """ Class provides data dictionary """
+    """ Class provides ecu_data dictionary """
     def handle(self):
         self.ecu_id = None
         (myhost, myport) = self.server.server_address
         rec = self.request.recv(1024)
         try:
-            _LOGGER.warning(f"From ECU @{myhost}:{myport} - {rec}")
+            _LOGGER.debug(f"From ECU @{myhost}:{myport} - {rec}")
             decrec = rec.decode('utf-8')
 
             if decrec[0:7] == "APS18AA": # walk through the ECU
-                data["timestamp"] = str(datetime.strptime(decrec[60:74], '%Y%m%d%H%M%S'))
-                data["ecu-id"] = decrec[18:30]
-                if data["ecu-id"][:4] == "2160":
-                    data["model"] = "ECU-R"
-                if data["ecu-id"][:4] == "2162":
-                    data["model"] = "ECU-R pro"
-                if data["ecu-id"][:4] == "2163":
-                    data["model"] = "ECU-B"
-                if data["ecu-id"][:3] == "215":
-                    data["model"] = "ECU-C"
-                data["lifetime_energy"] = int(decrec[42:60]) / 10
-                data["current_power"] = int(decrec[30:42]) / 100
-                data["qty_of_online_inverters"] = int(decrec[74:77])
+                ecu_data["timestamp"] = str(datetime.strptime(decrec[60:74], '%Y%m%d%H%M%S'))
+                ecu_data["ecu-id"] = decrec[18:30]
+                if ecu_data["ecu-id"][:4] == "2160":
+                    ecu_data["model"] = "ECU-R"
+                if ecu_data["ecu-id"][:4] == "2162":
+                    ecu_data["model"] = "ECU-R pro"
+                if ecu_data["ecu-id"][:4] == "2163":
+                    ecu_data["model"] = "ECU-B"
+                if ecu_data["ecu-id"][:3] == "215":
+                    ecu_data["model"] = "ECU-C"
+                ecu_data["lifetime_energy"] = int(decrec[42:60]) / 10
+                ecu_data["current_power"] = int(decrec[30:42]) / 100
+                ecu_data["qty_of_online_inverters"] = int(decrec[74:77])
                 inverters = {}
                 for m in re.finditer(r'END\d+', decrec): # walk through inverters
                     inv={}
@@ -87,23 +87,36 @@ class PROXYSERVER(BaseRequestHandler):
                             for offset in range(60, 123, 20)]
                         inv.update({"power": power, "voltage": voltage, "current": current})
                     inverters[inverter_uid] = inv
-                data["inverters"] = inverters
+                ecu_data["inverters"] = inverters
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.connect(("3.67.1.32", myport)) # don't use ecu.apsystemsema.com or it will loop
             sock.sendall(rec)
             response = sock.recv(1024)
-            _LOGGER.warning(f"Response from EMA: {response}")
+            _LOGGER.debug(f"From EMA: {response}")
             sock.close()
             self.request.send(response)
-            _LOGGER.warning(f"Returning data: {data}\n")
+
+            # When timediff is to large do not update sensors
+            timestamp_str = ecu_data.get('timestamp')
+            if timestamp_str != None:
+                start_time = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
+                end_time = datetime.now()
+                time_diff_min = (end_time - start_time).total_seconds() / 60
+                _LOGGER.warning(f"Returning ecu_data with timediff {time_diff_min:.2f} minutes: {ecu_data}\n")
+                if time_diff_min > 10:
+                    _LOGGER.warning("Timediff > 10")
+                    ecu_data.clear()
+            else:
+                ecu_data.clear()
+                
         except Exception:
             _LOGGER.warning(f"Exception error = {traceback.format_exc()}")
 
 #=============== zelf toegevoegd ===============================================
 def my_update():
     """ Get updated data """
-    _LOGGER.debug(f"Update: {data}")
-    return data
+    _LOGGER.debug(f"Update: {ecu_data}")
+    return ecu_data
 
 #===============================================================================
 async def async_start_proxy(config: dict):
@@ -136,7 +149,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     # maak een object van PROXYSERVER
     ecu = PROXYSERVER
     async def do_ecu_update():
-        while not data:
+        while not ecu_data:
             await asyncio.sleep(10)  # Check every 10 second for filled dict
             _LOGGER.debug("Waiting for data...")
         return await hass.async_add_executor_job(my_update)
@@ -156,6 +169,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         "ecu" : ecu,
         "coordinator" : coordinator
     }
+
+#    _LOGGER.debug("Waiting for first ecu_data...")
+#    await coordinator.async_config_entry_first_refresh()
 
     # Register the ECU and inverter(s)
     device_registry = dr.async_get(hass)
