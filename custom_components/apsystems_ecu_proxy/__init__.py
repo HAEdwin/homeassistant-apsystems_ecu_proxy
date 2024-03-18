@@ -7,6 +7,7 @@ import socketserver
 import threading
 import traceback
 import re
+import datetime as dt
 from datetime import timedelta, datetime
 from socketserver import BaseRequestHandler
 from homeassistant.helpers.entity import Entity
@@ -29,9 +30,15 @@ class APSystemsECUProxyInvalidData(Exception):
 
 ecu_data = {}
 
+class datareceiver:
+    def __init__(self, ecu_data):
+        self.ecu_data = ecu_data
+        _LOGGER.warning(f"#ecu_data# = {self.ecu_data}")
+
 # dit deel werkt
 class PROXYSERVER(BaseRequestHandler):
     """ Class provides ecu_data dictionary """
+
     def handle(self):
         self.ecu_id = None
         (myhost, myport) = self.server.server_address
@@ -96,29 +103,27 @@ class PROXYSERVER(BaseRequestHandler):
             sock.close()
             self.request.send(response)
 
-            # When timediff is to large do not update sensors
+            # After regular updates during inverter uptime ended, do not update sensors
             timestamp_str = ecu_data.get('timestamp')
-            if timestamp_str != None:
+            if timestamp_str != None: # prevents next line from error
                 start_time = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
                 end_time = datetime.now()
                 time_diff_min = (end_time - start_time).total_seconds() / 60
-                _LOGGER.warning(f"Returning ecu_data with timediff {time_diff_min:.2f} minutes: {ecu_data}\n")
+                _LOGGER.warning(f"{time_diff_min:.2f} minutes: {ecu_data}")
                 if time_diff_min > 10:
-                    _LOGGER.warning("Timediff > 10")
-                    ecu_data.clear()
-            else:
-                ecu_data.clear()
-                
+                    ecu_data['current_power'] = 0
+                    ecu_data['qty_of_online_inverters'] = 0
+                    for inverter_id, inverter_info in ecu_data['inverters'].items():
+                        inverter_info.update(
+                            {key: None for key in inverter_info 
+                            if key not in ['uid', 'model', 'channel_qty']}
+                            )
+                    _LOGGER.debug(f"Timediff > 10 keys set to None: {ecu_data}")
         except Exception:
             _LOGGER.warning(f"Exception error = {traceback.format_exc()}")
+# alternatieve manier als voorgesteld door Gemini
+#       proxy_server.on_data_received += on_ecu_data_received
 
-#=============== zelf toegevoegd ===============================================
-def my_update():
-    """ Get updated data """
-    _LOGGER.debug(f"Update: {ecu_data}")
-    return ecu_data
-
-#===============================================================================
 async def async_start_proxy(config: dict):
     """Setup the listeners and threads."""
     host = config['host']
@@ -141,18 +146,25 @@ async def async_start_proxy(config: dict):
             raise APSystemsECUProxyInvalidData(err)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
-
     """ Get server params and start Proxy """
     data_dict = entry.as_dict().get('data', {})
     await async_start_proxy(data_dict)
 
     # maak een object van PROXYSERVER
     ecu = PROXYSERVER
+
+# alternatieve manier als voorgesteld door Gemini
+#    async def on_ecu_data_received(data):
+#        ecu_data.update(data)  # Update dictionary with new data
+#        coordinator.async_set_updated_data(ecu_data)  # Update coordinator
+
+
+
     async def do_ecu_update():
         while not ecu_data:
             await asyncio.sleep(10)  # Check every 10 second for filled dict
             _LOGGER.debug("Waiting for data...")
-        return await hass.async_add_executor_job(my_update)
+        return ecu_data
 
     coordinator = DataUpdateCoordinator(
             hass,
@@ -170,10 +182,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         "coordinator" : coordinator
     }
 
-#    _LOGGER.debug("Waiting for first ecu_data...")
-#    await coordinator.async_config_entry_first_refresh()
 
-    # Register the ECU and inverter(s)
+    # Register the ECU and inverter(s)    
     device_registry = dr.async_get(hass)
     device_registry.async_get_or_create(
         config_entry_id=entry.entry_id,
