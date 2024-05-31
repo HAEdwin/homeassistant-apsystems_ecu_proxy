@@ -36,10 +36,10 @@ _LOGGER = logging.getLogger(__name__)
 
 #===============================================================================
 async def async_setup_entry(hass, config, add_entities, discovery_info=None):
-    
+
     ecu = hass.data[DOMAIN].get("ecu")
     coordinator = hass.data[DOMAIN].get("coordinator")
-    
+
     #instance_attributes = [attr for attr in vars(ecu)]
     #_LOGGER.warning(f"attributes:{instance_attributes}")
     
@@ -59,14 +59,29 @@ async def async_setup_entry(hass, config, add_entities, discovery_info=None):
             icon=SOLAR_ICON,
             stateclass=SensorStateClass.MEASUREMENT
         ),
-#        Onderstaande parameter wordt niet geupload naar EMA
-#        APSystemsECUSensor(coordinator, ecu, "today_energy", 
-#            label="Today Energy",
-#            unit=UnitOfEnergy.KILO_WATT_HOUR,
-#            devclass=SensorDeviceClass.ENERGY,
-#            icon=SOLAR_ICON,
-#            stateclass=SensorStateClass.TOTAL_INCREASING
-#        ),
+    # added======sensor.py==================================================
+        APSystemsECUSensor(coordinator, ecu, "hourly_energy_production", 
+            label="Hourly Energy Production",
+            unit=UnitOfEnergy.KILO_WATT_HOUR,
+            devclass=SensorDeviceClass.ENERGY,
+            icon=SOLAR_ICON,
+            stateclass=SensorStateClass.TOTAL_INCREASING
+        ),
+        APSystemsECUSensor(coordinator, ecu, "daily_energy_production", 
+            label="Daily Energy Production",
+            unit=UnitOfEnergy.KILO_WATT_HOUR,
+            devclass=SensorDeviceClass.ENERGY,
+            icon=SOLAR_ICON,
+            stateclass=SensorStateClass.TOTAL_INCREASING
+        ),
+        APSystemsECUSensor(coordinator, ecu, "lifetime_energy_production", 
+            label="Lifetime Energy Production",
+            unit=UnitOfEnergy.KILO_WATT_HOUR,
+            devclass=SensorDeviceClass.ENERGY,
+            icon=SOLAR_ICON,
+            stateclass=SensorStateClass.TOTAL_INCREASING
+        ),
+        # added=================================================================
         APSystemsECUSensor(coordinator, ecu, "lifetime_energy", 
             label="Lifetime Energy",
             unit=UnitOfEnergy.KILO_WATT_HOUR,
@@ -137,9 +152,7 @@ async def async_setup_entry(hass, config, add_entities, discovery_info=None):
 
 class APSystemsECUInverterSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator, ecu, uid, field, index=0, label=None, icon=None, unit=None, devclass=None, stateclass=None, entity_category=None):
-
         super().__init__(coordinator)
-
         self.coordinator = coordinator
         self._index = index
         self._uid = uid
@@ -173,7 +186,7 @@ class APSystemsECUInverterSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def state(self):
-        _LOGGER.debug(f"State called for {self._field}")
+        #_LOGGER.debug(f"State called for {self._field}")
         try:
             match self._field:
                 case "voltage":
@@ -205,7 +218,7 @@ class APSystemsECUInverterSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def state_class(self):
-        _LOGGER.debug(f"State class {self._stateclass} - {self._field}")
+        #_LOGGER.debug(f"State class {self._stateclass} - {self._field}")
         return self._stateclass
 
     @property
@@ -224,9 +237,7 @@ class APSystemsECUInverterSensor(CoordinatorEntity, SensorEntity):
 class APSystemsECUSensor(CoordinatorEntity, SensorEntity):
 
     def __init__(self, coordinator, ecu, field, label=None, icon=None, unit=None, devclass=None, stateclass=None, entity_category=None):
-
         super().__init__(coordinator)
-
         self.coordinator = coordinator
 # Hier worden de basis gegevens van de integratie (device info weergegeven)
         self._ecu = self.coordinator.data.get('ecu-id')
@@ -256,7 +267,7 @@ class APSystemsECUSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def state(self):
-        _LOGGER.debug(f"State called for {self._field}")
+        #_LOGGER.debug(f"State called for {self._field}")
         return self.coordinator.data.get(self._field)
 
     @property
@@ -277,7 +288,7 @@ class APSystemsECUSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def state_class(self):
-        _LOGGER.debug(f"State class {self._stateclass} - {self._field}")
+        #_LOGGER.debug(f"State class {self._stateclass} - {self._field}")
         return self._stateclass
 
     @property
