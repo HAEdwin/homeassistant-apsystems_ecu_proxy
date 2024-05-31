@@ -24,17 +24,3 @@ b'APS18AA302AAAAAAA1216000064136000000019000000000000000021279202402061122140020
 {'ECU': {'ECU-ID': '216000064136', 'Current power': 190.0, 'Lifetime Energy': 2127.9, 'datetimestamp': '2024-02-06 11:22:14', 'Online inverters': 2}, 'Inverters': [{'Iid': '408000111178', 'V': 228, 'F': 50.0, 'T': 13, 'DC1': 33.8, 'A1': 4.09, 'P1': '017', 'DC2': 33.9, 'A2': 4.19, 'P2': '018'}, {'Iid': '806000011223', 'V': 228, 'F': 50.0, 'T': 15, 'DC1': 31.1, 'A1': 3.09, 'P1': '029', 'DC2': 34.2, 'A2': 0.7, 'P2': '038', 'DC3': 33.4, 'A3': 5.69, 'P3': '045', 'DC4': 32.9, 'A4': 4.37, 'P4': '043'}]}
 
 Iid=Inverter id, V=Voltage, F=Frequency, T=Temperature, DC=Direct Current, A=Current, P=Power
-
-## Alsmost there but I get stuck on creating the sensors
-When the integration is installed, no sensor data (or amount of sensors/devices) is known. 
-Only when the first data arrives, it is known how many inverters, type etcetera there are. 
-So the sensors need be created dynamically and if an inverter is later added it needs to create sensors for that device also.
-There is always one ECU (hub), but there can be multiple inverters.
-
-## Where I need help
-Create one inverter sensor entity (for example the one named below) as an example 🙏
-- I think the sensors can be added iteratively from the dictionary (I can handle that from the example) within sensor.py? but how do I get the datadict available there?
-
-## Naming the sensor
-I think it will be useful to use the IDs (from ECU and individual inverters) to distinguish and group the different sensors.
-For example a sensor entity could benamed: ***Inverter 408000111178 Voltage*** or ***Inverter 408000111178 Power Ch 1***
