@@ -45,6 +45,7 @@ class PROXYSERVER(BaseRequestHandler):
                     _LOGGER.warning(f"Checksum error: {decrec}")
                     return None    
                 _LOGGER.debug(f"From ECU @{myhost}:{myport} - {rec}")
+                # Get ECU data
                 ecu_data["timestamp"] = str(datetime.strptime(decrec[60:74], '%Y%m%d%H%M%S'))
                 ecu_data["ecu-id"] = decrec[18:30]
                 if ecu_data["ecu-id"][:4] == "2160":
@@ -62,6 +63,7 @@ class PROXYSERVER(BaseRequestHandler):
                 # Continue
                 ecu_data["current_power"] = int(decrec[30:42]) / 100
                 ecu_data["qty_of_online_inverters"] = int(decrec[74:77])
+                # Get inverters data
                 inverters = {}
                 for m in re.finditer(r'END\d+', decrec): # walk through inverters
                     inv={}
