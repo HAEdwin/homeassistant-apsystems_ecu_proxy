@@ -20,34 +20,31 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
     )
 from .const import DOMAIN
+from homeassistant.components.persistent_notification import async_create
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor"]
 
 class APSystemsECUProxyInvalidData(Exception):
     """ Class provides passforward for error massages """
-    #pass (advies Pylint om weg te halen)
+    pass
 
 ecu_data = {}
 
-class datareceiver:
-    def __init__(self, ecu_data):
-        self.ecu_data = ecu_data
-        _LOGGER.warning(f"#ecu_data# = {self.ecu_data}")
-
-# dit deel werkt
 class PROXYSERVER(BaseRequestHandler):
     """ Class provides ecu_data dictionary """
-
     def handle(self):
-        self.ecu_id = None
         (myhost, myport) = self.server.server_address
         rec = self.request.recv(1024)
         try:
-            _LOGGER.debug(f"From ECU @{myhost}:{myport} - {rec}")
             decrec = rec.decode('utf-8')
-
-            if decrec[0:7] == "APS18AA": # walk through the ECU
+            # process data
+            if decrec[0:7] == "APS18AA":
+                # analyse valid data strings by using the checksum and exit when invalid
+                if int(decrec[7:10]) != len(decrec)-1:
+                    _LOGGER.warning(f"Checksum error: {decrec}")
+                    return None    
+                _LOGGER.debug(f"From ECU @{myhost}:{myport} - {rec}")
                 ecu_data["timestamp"] = str(datetime.strptime(decrec[60:74], '%Y%m%d%H%M%S'))
                 ecu_data["ecu-id"] = decrec[18:30]
                 if ecu_data["ecu-id"][:4] == "2160":
@@ -58,7 +55,11 @@ class PROXYSERVER(BaseRequestHandler):
                     ecu_data["model"] = "ECU-B"
                 if ecu_data["ecu-id"][:3] == "215":
                     ecu_data["model"] = "ECU-C"
-                ecu_data["lifetime_energy"] = int(decrec[42:60]) / 10
+                # Do not update lifetime energy during maintenance
+                if (ecu_data.get('lifetime_energy') is None or
+                    int(decrec[42:60]) / 10 > ecu_data.get('lifetime_energy')):
+                    ecu_data["lifetime_energy"] = int(decrec[42:60]) / 10
+                # Continue
                 ecu_data["current_power"] = int(decrec[30:42]) / 100
                 ecu_data["qty_of_online_inverters"] = int(decrec[74:77])
                 inverters = {}
@@ -102,27 +103,24 @@ class PROXYSERVER(BaseRequestHandler):
             _LOGGER.debug(f"From EMA: {response}")
             sock.close()
             self.request.send(response)
-
-            # After regular updates during inverter uptime ended, do not update sensors
-            timestamp_str = ecu_data.get('timestamp')
-            if timestamp_str != None: # prevents next line from error
-                start_time = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
-                end_time = datetime.now()
-                time_diff_min = (end_time - start_time).total_seconds() / 60
-                _LOGGER.warning(f"{time_diff_min:.2f} minutes: {ecu_data}")
-                if time_diff_min > 10:
-                    ecu_data['current_power'] = 0
-                    ecu_data['qty_of_online_inverters'] = 0
-                    for inverter_id, inverter_info in ecu_data['inverters'].items():
-                        inverter_info.update(
-                            {key: None for key in inverter_info 
-                            if key not in ['uid', 'model', 'channel_qty']}
-                            )
-                    _LOGGER.debug(f"Timediff > 10 keys set to None: {ecu_data}")
+            
+            # Do not update sensors when inverters are down (ignore maintenance updates)
+            start_time = datetime.strptime(ecu_data.get('timestamp'), '%Y-%m-%d %H:%M:%S')
+            time_diff_min = (datetime.now() - start_time).total_seconds() / 60
+            _LOGGER.debug(f"{time_diff_min:.2f} minutes: {ecu_data}")
+            if time_diff_min > 10:
+                ecu_data['current_power'] = 0
+                ecu_data['qty_of_online_inverters'] = 0
+                for inverter_id, inverter_info in ecu_data['inverters'].items():
+                    inverter_info.update(
+                        {key: None for key in inverter_info
+                        if key not in ['uid', 'model', 'channel_qty']}
+                        )
+                _LOGGER.debug(f"Timediff > 10 so keys are set to None: {ecu_data}")
+            return ecu_data
         except Exception:
-            _LOGGER.warning(f"Exception error = {traceback.format_exc()}")
-# alternatieve manier als voorgesteld door Gemini
-#       proxy_server.on_data_received += on_ecu_data_received
+            _LOGGER.warning(f"Exception error with {traceback.format_exc()}")
+            return None
 
 async def async_start_proxy(config: dict):
     """Setup the listeners and threads."""
@@ -139,54 +137,45 @@ async def async_start_proxy(config: dict):
         _LOGGER.warning("Proxy Started...")
         return True
     except OSError as err:
-        if err.errno == 98:
-            # Ignore 'server address in use' error @ first setup
+        # Ignore 'server address in use' or 'server not found' error @ first setup
+        if err.errno == 98 or err.errno == 99:
+            _LOGGER.warning(f"Following OSError occured:{err.errno}")
             pass
         else:
+            _LOGGER.warning(f"Proxy not started:{err.errno}")
             raise APSystemsECUProxyInvalidData(err)
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
+async def async_setup_entry(hass, config_entry):
     """ Get server params and start Proxy """
-    data_dict = entry.as_dict().get('data', {})
+    data_dict = config_entry.as_dict().get('data', {})
     await async_start_proxy(data_dict)
-
-    # maak een object van PROXYSERVER
+     # maak een object van PROXYSERVER
     ecu = PROXYSERVER
-
-# alternatieve manier als voorgesteld door Gemini
-#    async def on_ecu_data_received(data):
-#        ecu_data.update(data)  # Update dictionary with new data
-#        coordinator.async_set_updated_data(ecu_data)  # Update coordinator
-
-
 
     async def do_ecu_update():
         while not ecu_data:
             await asyncio.sleep(10)  # Check every 10 second for filled dict
-            _LOGGER.debug("Waiting for data...")
+            #_LOGGER.warning("Waiting for data...")
         return ecu_data
 
     coordinator = DataUpdateCoordinator(
-            hass,
-            _LOGGER,
-            name=DOMAIN,
-            update_method=do_ecu_update,
-            update_interval=timedelta(seconds=10)
+        hass,
+        _LOGGER,
+        name=DOMAIN,
+        update_method=do_ecu_update,
+        update_interval=timedelta(seconds=10) #omitting this won't update the entities
     )
-
-    _LOGGER.debug("Waiting for first data...")
     await coordinator.async_config_entry_first_refresh()
 
     hass.data[DOMAIN] = {
-        "ecu" : ecu,
-        "coordinator" : coordinator
+        "ecu": ecu,
+        "coordinator": coordinator
     }
 
-
-    # Register the ECU and inverter(s)    
+    # Register the ECU device
     device_registry = dr.async_get(hass)
     device_registry.async_get_or_create(
-        config_entry_id=entry.entry_id,
+        config_entry_id=config_entry.entry_id,
         identifiers={(DOMAIN, f"ecu_{coordinator.data.get('ecu-id')}")},
         manufacturer="APSystems",
         suggested_area="Roof",
@@ -194,10 +183,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         model=f"{coordinator.data.get('model')}",
         )
 
+    # Register the Inverter devices
     inverters = coordinator.data.get("inverters", {})
     for uid,inv_data in inverters.items():
         device_registry.async_get_or_create(
-            config_entry_id=entry.entry_id,
+            config_entry_id=config_entry.entry_id,
             identifiers={(DOMAIN, f"inverter_{uid}")},
             manufacturer="APSystems",
             suggested_area="Roof",
@@ -205,16 +195,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             model=inv_data.get("model")
         )
 
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    _LOGGER.warning("First data received...")
+    await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
+    _LOGGER.warning("Data received...")
     return True
 
-async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
+async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = all(
         await asyncio.gather(
             *[
-                hass.config_entries.async_forward_entry_unload(entry, component)
+                hass.config_entries.async_forward_entry_unload(config_entry, component)
                 for component in PLATFORMS
             ]
         )
@@ -222,12 +212,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     return unload_ok
 
 # Enables users to delete a device
-async def async_remove_config_entry_device(hass, config, device_entry) -> bool:
+async def async_remove_config_entry_device(hass, config_entry, device_entry) -> bool:
     """ Function to remove inividual devices from the integration (ok) """
     if device_entry is not None:
         # Notify the user that the device has been removed
-        hass.components.persistent_notification.async_create(
+        async_create(
+            hass,
             f"The following device was removed from the system: {device_entry}",
-            title="Device Removed",
+            title='Device removal'
         )
         return True
