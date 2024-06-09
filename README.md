@@ -9,9 +9,10 @@ It collects data from a PV installation to show in Home Assistant. The data come
 ## Prerequisites
 - An APSystems ECU device starting with ECU-ID 2160 (might be compatible with other ECU types, I don't know yet but suppose it will)
 - PiHole or AdGuard running as add-on installed on Home Assistant or elsewhere to rewrite the DNS
+- Unifi controller (from version 8.2.93)
 
 ## What the integration does
-It listens on ports for incoming data. Every five minutes the ECU sends PV data to ecu.apsystemsema.com alternately via port 8995, 8996 and 8997.
+It listens on ports for incoming data. About every five minutes the ECU sends PV data to ecu.apsystemsema.com alternately via port 8995, 8996 and 8997.
 By rewriting the URL designation to the IP-Address from this Proxy integration, the traffic is intercepted, interpreted and send through to the receiver (ecu.apsystemsema.com)
 Same goes for the returned data from the EMA site to the ECU device, this needs no interpretation and is directly returned to the ECU.
 
