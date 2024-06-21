@@ -17,3 +17,7 @@ Data is then being analyzed for use in Home Assistant so it doesn't disturb the 
 ## Rewrite DNS traffic
 
 ## Data collected
+
+## Q & A
+Q: I see different results from the integration and at EMA, why is that?
+A: Partly it depends on when you compare the results. If the inverters are offline, the ECU will start a maintenance cycle. The completeness of data transfer is checked and missed data at EMA is resent to EMA. This means that the results may not match each other better until the next day. Values ​​may differ because the time span over which results are calculated is different. However, differences should not be large because both the integration and EMA use the same data.
