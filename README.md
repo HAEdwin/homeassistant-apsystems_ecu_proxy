@@ -16,7 +16,10 @@ Data is then being analyzed for use in Home Assistant so it doesn't disturb the 
 
 ## Rewrite DNS traffic
 
-## Data collected
+## Available sensors
+- ECU: Power, Number of inverters online, Lifetime Energy, Last update
+- Inverters: Temperature, Frequency, Power per channel, Current per channel, Voltage per channel
+- Calculated: Hourly Energy produced, Daily Energy produced, Lifetime Energy produced 
 
 ## Q & A
 - Q: I see different results from the integration and at EMA, why is that?
