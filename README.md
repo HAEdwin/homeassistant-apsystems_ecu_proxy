@@ -26,5 +26,7 @@ Within 6 minutes data should be received by the integration and entities will ap
 ## Q & A
 - Q: I see different results from the integration and at EMA, why is that?
 A: Partly it depends on when you compare the results. If the inverters are offline, the ECU will start a maintenance cycle. The completeness of data transfer is checked and missed data at EMA is resent to EMA. This means that the results may not match each other better until the next day. Values ​​may differ because the time span over which results are calculated is different. However, differences should not be large because both the integration and EMA use the same data.
-- Q: I get the message "No devices or entities" after installing the integration
+- Q: I get the message "No devices or entities" after installing the integration?
 A: The inverters are off-line, without them the integration is unable to determen what hardware is connected to the ECU.
+- Q: Will deleting the integration make me loose all the data (like Lifetime Energy)?
+A: Yes, deleting the integration will remove the entities and their most current values - history data however is kept in de HA database.
