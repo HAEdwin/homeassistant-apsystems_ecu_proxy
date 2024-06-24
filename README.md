@@ -30,3 +30,5 @@ A: Partly it depends on when you compare the results. If the inverters are offli
 A: The inverters are off-line, without them the integration is unable to determen what hardware is connected to the ECU.
 - Q: Will deleting the integration make me loose all the data (like Lifetime Energy)?
 A: Yes, deleting the integration will remove the entities and their most current values - history data however is kept in de HA database.
+- Q: On what day does the new week start?
+A: It starts on monday.
