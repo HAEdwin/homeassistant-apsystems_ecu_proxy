@@ -1,4 +1,4 @@
-![Home Assistant Dashboard](https://github.com/ksheumaker/homeassistant-apsystems_ecur/blob/main/impression.jpg)
+![Home Assistant Dashboard](https://github.com/HAEdwin/homeassistant-apsystems_ecu_proxy/blob/main/impression.jpg)
 # APsystems ECU Proxy
 
 ### &#x1F534; This integration is under construction
