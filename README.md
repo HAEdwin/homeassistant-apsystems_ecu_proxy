@@ -21,7 +21,7 @@ Within 6 minutes data should be received by the integration and entities will ap
 ## Available sensors
 - ECU: Power, Number of inverters online, Lifetime Energy, Last update
 - Inverters: Temperature, Frequency, Power per channel, Current per channel, Voltage per channel
-- Calculated: Hourly Energy produced, Daily Energy produced, Lifetime Energy produced, Daily Max Power, Weekly Max Power, Monthly Max Power, Yearly Max Power, Lifetime Max Power.
+- Calculated: Hourly Energy produced, Daily Energy produced, Lifetime Energy produced, Daily Max Power, Lifetime Max Power.
 
 ## Q & A
 - Q: I see different results from the integration and at EMA, why is that?
