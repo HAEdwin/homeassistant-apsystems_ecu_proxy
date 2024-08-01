@@ -5,7 +5,7 @@
 
 ## Main purpose
 This integration intercepts and collects data from your APsystems driven PV installation. 
-The data from the ***E***nergy ***C***ommunication ***U***nit is first being received by this integration and first forwarded to APsystems ***E***nergy ***M***onitoring and ***A***nalysis website.
+The data from the ***E***nergy ***C***ommunication ***U***nit is being received by this integration and first forwarded to APsystems ***E***nergy ***M***onitoring and ***A***nalysis website.
 The optained data is then being analyzed for use in Home Assistant so it doesn't disturb the regular process of the ECU sending data to EMA.
 
 ## Prerequisites
