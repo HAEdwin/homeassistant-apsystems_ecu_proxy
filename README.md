@@ -10,8 +10,7 @@ The optained data is then being analyzed for use in Home Assistant so it doesn't
 
 ## Prerequisites
 - An APsystems ECU device starting with ECU-ID 2160 (might be compatible with other ECU types, I don't know yet but suppose it will - if it does not let me know and show me some logging!)
-- PiHole, AdGuard or Unifi controller (from version 8.2.93) running as add-on installed on Home Assistant (or something else to rewrite DNS)
-- IP-address running the proxy
+- PiHole, AdGuard running as add-on installed on Home Assistant or something else like Unifi controller (from version 8.2.93) to rewrite DNS.
 
 ## Install the integration
 
