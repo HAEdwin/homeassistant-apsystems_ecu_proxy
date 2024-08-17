@@ -1,19 +1,19 @@
 {
-  "config": {
-    "step": {
-      "user": {
-        "data": {
-          "host": "Proxy IP address (without leading zero)"
+    "config": {
+        "step": {
+            "user": {
+                "data": {
+                    "host": "Proxy IP address (without leading zero)"
+                },
+                "title": "APsystems ECU Proxy Options"
+            }
         },
-        "title": "APSystems ECU Proxy Options"
-      }
-    },
-    "error": {
-      "cannot_connect": "Can't start proxy at this IP-Address",
-      "unknown": "Unknown error, see log for details"
-    },
-    "abort": {
-      "already_configured": "Only single instance configuration possible"
+        "error": {
+            "cannot_connect": "Can't start proxy at this IP-Address",
+            "unknown": "Unknown error, see log for details"
+        },
+        "abort": {
+            "already_configured": "Only single instance configuration possible"
+        }
     }
-  }
 }
