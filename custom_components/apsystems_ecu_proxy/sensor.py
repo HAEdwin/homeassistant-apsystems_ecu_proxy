@@ -1,305 +1,631 @@
+"""Handles sensor entities."""
+
 from __future__ import annotations
 
-from datetime import timedelta, datetime, date
+from dataclasses import dataclass
+from datetime import datetime
 import logging
-
-import async_timeout
-from homeassistant.util import dt as dt_util
-from homeassistant.helpers.entity import Entity, EntityCategory
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
-from homeassistant.core import HomeAssistant
+from typing import Any
 
 from homeassistant.components.sensor import (
+    RestoreSensor,
     SensorDeviceClass,
     SensorEntity,
-    SensorStateClass
+    SensorStateClass,
 )
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import (
+    ATTR_UNIT_OF_MEASUREMENT,
+    UnitOfElectricCurrent,
+    UnitOfElectricPotential,
+    UnitOfEnergy,
+    UnitOfFrequency,
+    UnitOfPower,
+    UnitOfTemperature,
+)
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.entity import EntityCategory
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from .const import (
+    ATTR_SUMMATION_FACTOR,
+    ATTR_SUMMATION_PERIOD,
+    ATTR_SUMMATION_TYPE,
+    ATTR_TIMESTAMP,
     DOMAIN,
+    MAX_STUB_INTERVAL,
     SOLAR_ICON,
-    FREQ_ICON,
-    DCVOLTAGE_ICON
+    SummationPeriod,
+    SummationType,
 )
-from homeassistant.const import (
-    UnitOfPower,
-    UnitOfEnergy,
-    UnitOfTemperature,
-    UnitOfElectricPotential,
-    UnitOfElectricCurrent,
-    UnitOfFrequency
+from .helpers import (
+    add_local_timezone,
+    get_period_start_timestamp,
+    has_changed_period,
+    slugify,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
-#===============================================================================
-async def async_setup_entry(hass, config, add_entities, discovery_info=None):
 
-    ecu = hass.data[DOMAIN].get("ecu")
-    coordinator = hass.data[DOMAIN].get("coordinator")
+@dataclass
+class SensorData:
+    """Class to pass data to sensor."""
 
-    #instance_attributes = [attr for attr in vars(ecu)]
-    #_LOGGER.warning(f"attributes:{instance_attributes}")
-    
-    inverters = coordinator.data.get("inverters", {})
-    ecu_id = coordinator.data.get("ecu-id")
-    #vanaf hier moeten alle gegevens bekend zijn! coordinator.data bevat de volledige datadictionary
+    data: Any
+    attributes: dict[str, Any] | None = None
 
-    if not coordinator.data:
-        _LOGGER.warning("Tijdelijke dummy data ingezet")
-        coordinator.data = {'timestamp': None, 'inverters': {None: {'uid': None, 'temperature': None, 'frequency': None, 'model': None, 'channel_qty': None, 'power': [None, None], 'voltage': [None, None], 'current': [None, None]}}, 'ecu-id': None, 'lifetime_energy': None, 'current_power': None, 'qty_of_online_inverters': None}
 
-    sensors = [
-        APSystemsECUSensor(coordinator, ecu, "current_power", 
-            label="Current Power",
-            unit=UnitOfPower.WATT,
-            devclass=SensorDeviceClass.POWER,
-            icon=SOLAR_ICON,
-            stateclass=SensorStateClass.MEASUREMENT
-        ),
-    # added======sensor.py==================================================
-        APSystemsECUSensor(coordinator, ecu, "hourly_energy_production", 
-            label="Hourly Energy Production",
-            unit=UnitOfEnergy.KILO_WATT_HOUR,
-            devclass=SensorDeviceClass.ENERGY,
-            icon=SOLAR_ICON,
-            stateclass=SensorStateClass.TOTAL_INCREASING
-        ),
-        APSystemsECUSensor(coordinator, ecu, "daily_energy_production", 
-            label="Daily Energy Production",
-            unit=UnitOfEnergy.KILO_WATT_HOUR,
-            devclass=SensorDeviceClass.ENERGY,
-            icon=SOLAR_ICON,
-            stateclass=SensorStateClass.TOTAL_INCREASING
-        ),
-        APSystemsECUSensor(coordinator, ecu, "lifetime_energy_production", 
-            label="Lifetime Energy Production",
-            unit=UnitOfEnergy.KILO_WATT_HOUR,
-            devclass=SensorDeviceClass.ENERGY,
-            icon=SOLAR_ICON,
-            stateclass=SensorStateClass.TOTAL_INCREASING
-        ),
-        # added=================================================================
-        APSystemsECUSensor(coordinator, ecu, "lifetime_energy", 
-            label="Lifetime Energy",
-            unit=UnitOfEnergy.KILO_WATT_HOUR,
-            devclass=SensorDeviceClass.ENERGY,
-            icon=SOLAR_ICON,
-            stateclass=SensorStateClass.TOTAL_INCREASING
-        ),
-        APSystemsECUSensor(coordinator, ecu, "qty_of_online_inverters", 
-            label="Inverters Online",
-            icon=SOLAR_ICON,
-            entity_category=EntityCategory.DIAGNOSTIC
-        ),
-    ]
+@dataclass
+class SummationParameters:
+    """Class for summation attributes."""
 
-    if coordinator.data:
-        inverters = coordinator.data.get("inverters", {})
-        for uid,inv_data in inverters.items():
-            _LOGGER.debug(f"Inverter {uid} {inv_data.get('channel_qty')}")
-            if inv_data.get("channel_qty") != None:
-                sensors.extend([
-                        APSystemsECUInverterSensor(coordinator, ecu, uid, "temperature",
-                            label="Temperature",
-                            unit=UnitOfTemperature.CELSIUS,
-                            devclass=SensorDeviceClass.TEMPERATURE,
-                            stateclass=SensorStateClass.MEASUREMENT,
-                            entity_category=EntityCategory.DIAGNOSTIC
-                        ),
-                        APSystemsECUInverterSensor(coordinator, ecu, uid, "frequency",
-                            label="Frequency",
-                            unit=UnitOfFrequency.HERTZ,
-                            stateclass=SensorStateClass.MEASUREMENT,
-                            devclass=SensorDeviceClass.FREQUENCY,
-                            icon=FREQ_ICON,
-                            entity_category=EntityCategory.DIAGNOSTIC
-                        ),
-                ])
-                for i in range(0, inv_data.get("channel_qty", 0)):
-                    sensors.append(
-                        APSystemsECUInverterSensor(coordinator, ecu, uid, f"power", 
-                            index=i, label=f"Power Ch {i+1}",
-                            unit=UnitOfPower.WATT,
-                            devclass=SensorDeviceClass.POWER,
-                            icon=SOLAR_ICON,
-                            stateclass=SensorStateClass.MEASUREMENT
-                        ),
+    value: str
+    timestamp: str
+
+
+@dataclass
+class APSystemSensorConfig:
+    """Class for a sensor config."""
+
+    unique_id: str | None = None
+    name: str | None = None
+    device_identifier: str | None = None
+    initial_value: SensorData | None = None
+    display_uom: str | None = None
+    display_precision: int | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class APSystemSensorDefinition:
+    """Class for sensor definition."""
+
+    name: str
+    icon: str | None = None
+    parameter: str | None = None
+    device_class: SensorDeviceClass | None = None
+    state_class: SensorStateClass | None = None
+    unit_of_measurement: str | None = None
+    entity_category: EntityCategory | None = None
+    summation_entity: bool = False
+    summation_period: SummationPeriod | None = None
+    summation_type: SummationType | None = None
+    summation_factor: float = 1
+
+
+ECU_SENSORS: tuple[APSystemSensorDefinition, ...] = (
+    APSystemSensorDefinition(
+        name="Current Power",
+        icon=SOLAR_ICON,
+        parameter="current_power",
+        device_class=SensorDeviceClass.POWER,
+        unit_of_measurement=UnitOfPower.WATT,
+    ),
+    APSystemSensorDefinition(
+        name="Hourly Energy Production",
+        icon=SOLAR_ICON,
+        parameter="current_power",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL,
+        unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        summation_entity=True,
+        summation_period=SummationPeriod.HOURLY,
+        summation_type=SummationType.SUM,
+        summation_factor=1000,
+    ),
+    APSystemSensorDefinition(
+        name="Daily Energy Production",
+        icon=SOLAR_ICON,
+        parameter="current_power",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL,
+        unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        summation_entity=True,
+        summation_period=SummationPeriod.DAILY,
+        summation_type=SummationType.SUM,
+        summation_factor=1000,
+    ),
+    APSystemSensorDefinition(
+        name="Lifetime Energy Production",
+        icon=SOLAR_ICON,
+        parameter="current_power",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        summation_entity=True,
+        summation_period=SummationPeriod.LIFETIME,
+        summation_type=SummationType.SUM,
+        summation_factor=1000,
+    ),
+    APSystemSensorDefinition(
+        name="Lifetime Energy",
+        icon=SOLAR_ICON,
+        parameter="lifetime_energy",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+    ),
+    APSystemSensorDefinition(
+        name="Daily Max Power",
+        icon=SOLAR_ICON,
+        parameter="current_power",
+        device_class=SensorDeviceClass.POWER,
+        unit_of_measurement=UnitOfPower.WATT,
+        summation_entity=True,
+        summation_period=SummationPeriod.DAILY,
+        summation_type=SummationType.MAX,
+    ),
+    APSystemSensorDefinition(
+        name="Lifetime Max Power",
+        icon=SOLAR_ICON,
+        parameter="current_power",
+        device_class=SensorDeviceClass.POWER,
+        unit_of_measurement=UnitOfPower.WATT,
+        summation_entity=True,
+        summation_period=SummationPeriod.LIFETIME,
+        summation_type=SummationType.MAX,
+    ),
+    APSystemSensorDefinition(
+        name="Inverters Online",
+        parameter="qty_of_online_inverters",
+    ),
+    APSystemSensorDefinition(
+        name="Last Update",
+        parameter="timestamp",
+        device_class=SensorDeviceClass.TIMESTAMP,
+    ),
+)
+
+
+INVERTER_SENSORS: tuple[APSystemSensorDefinition, ...] = (
+    APSystemSensorDefinition(
+        name="Temperature",
+        parameter="temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        unit_of_measurement=UnitOfTemperature.CELSIUS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    APSystemSensorDefinition(
+        name="Frequency",
+        parameter="frequency",
+        device_class=SensorDeviceClass.FREQUENCY,
+        unit_of_measurement=UnitOfFrequency.HERTZ,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+)
+
+INVERTER_CHANNEL_SENSORS: tuple[APSystemSensorDefinition, ...] = (
+    APSystemSensorDefinition(
+        name="Power",
+        parameter="power",
+        device_class=SensorDeviceClass.POWER,
+        unit_of_measurement=UnitOfPower.WATT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    APSystemSensorDefinition(
+        name="Voltage",
+        parameter="voltage",
+        device_class=SensorDeviceClass.VOLTAGE,
+        unit_of_measurement=UnitOfElectricPotential.VOLT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    APSystemSensorDefinition(
+        name="Current",
+        parameter="current",
+        device_class=SensorDeviceClass.CURRENT,
+        unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+)
+
+
+# ===============================================================================
+async def async_setup_entry(
+    hass: HomeAssistant, config_entry: ConfigEntry, add_entities: AddEntitiesCallback
+):
+    """Initialise sensor platform."""
+
+    def get_device_entry(device_id):
+        """Get device entry by device id."""
+        try:
+            device_registry = dr.async_get(hass)
+            devices = device_registry.devices.get_devices_for_config_entry_id(
+                config_entry.entry_id
+            )
+            return [device for device in devices if device.id == device_id][0]
+        except IndexError:
+            return None
+
+    def restore_sensors():
+        """Restore all previously registered sensors."""
+        sensors = []
+
+        entity_registry = er.async_get(hass)
+        entries = er.async_entries_for_config_entry(
+            entity_registry, config_entry.entry_id
+        )
+
+        for entry in entries:
+            if device := get_device_entry(entry.device_id):
+                definition = APSystemSensorDefinition(
+                    name=entry.original_name,
+                    icon=entry.original_icon,
+                    device_class=entry.device_class or entry.original_device_class,
+                    unit_of_measurement=entry.unit_of_measurement,
+                    entity_category=entry.entity_category,
+                )
+
+                config = APSystemSensorConfig(
+                    unique_id=entry.unique_id,
+                    device_identifier=device.identifiers,
+                    display_uom=entry.options.get("sensor", {}).get(
+                        "unit_of_measurement"
                     ),
-                    sensors.append(
-                        APSystemsECUInverterSensor(coordinator, ecu, uid, "voltage",
-                            index=i, label=f"Voltage Ch {i+1}",
-                            unit=UnitOfElectricPotential.VOLT,
-                            devclass=SensorDeviceClass.VOLTAGE,
-                            icon=DCVOLTAGE_ICON,
-                            stateclass=SensorStateClass.MEASUREMENT,
-                            entity_category=EntityCategory.DIAGNOSTIC
-                        ),
-                    ),
-                    sensors.append(    
-                        APSystemsECUInverterSensor(coordinator, ecu, uid, "current",
-                            index=i, label=f"Current Ch {i+1}",
-                            unit=UnitOfElectricCurrent.AMPERE,
-                            devclass=SensorDeviceClass.CURRENT,
-                            icon=DCVOLTAGE_ICON,
-                            stateclass=SensorStateClass.MEASUREMENT,
-                            entity_category=EntityCategory.DIAGNOSTIC
-                        ),
-                    )
+                )
+
+                sensors.append(APSystemsSensor(definition, config))
+
+        if sensors:
+            add_entities(sensors)
+
+    @callback
+    def handle_ecu_registration(data: dict[str, Any]):
+        """Handle ECU entity creation."""
+
+        # We have found an ECU that is not registered in the device registry
+        # So, create all sensors described in ECU_SENSORS
+
+        _LOGGER.debug("Registering new ECU: %s", data)
+
+        ecu_id = data.get("ecu-id")
+        device_identifiers = {(DOMAIN, f"ecu_{ecu_id}")}
+
+        # Create device
+        device_registry = dr.async_get(hass)
+        device_registry.async_get_or_create(
+            config_entry_id=config_entry.entry_id,
+            identifiers=device_identifiers,
+            manufacturer="APSystems",
+            suggested_area="Roof",
+            name=f"ECU {ecu_id}",
+            model=f"{data.get('model')}",
+        )
+
+        sensors = []
+        for sensor in ECU_SENSORS:
+            # Added for summation sensors to get initial attribute values
+            initial_attribute_values = {}
+            if sensor.summation_entity:
+                initial_attribute_values[ATTR_TIMESTAMP] = data.get(ATTR_TIMESTAMP)
+
+            config = APSystemSensorConfig(
+                unique_id=f"{ecu_id}_{slugify(sensor.name)}",
+                device_identifier=device_identifiers,
+                initial_value=SensorData(
+                    data=data.get(sensor.parameter), attributes=initial_attribute_values
+                ),
+            )
+            sensors.append(APSystemsSensor(sensor, config))
         add_entities(sensors)
 
-class APSystemsECUInverterSensor(CoordinatorEntity, SensorEntity):
-    def __init__(self, coordinator, ecu, uid, field, index=0, label=None, icon=None, unit=None, devclass=None, stateclass=None, entity_category=None):
-        super().__init__(coordinator)
-        self.coordinator = coordinator
-        self._index = index
-        self._uid = uid
-        self._ecu = self.coordinator.data.get('ecu-id')
-        self._field = field
-        self._devclass = devclass
-        self._label = label
-        if not label:
-            self._label = field
-        self._icon = icon
-        self._unit = unit
-        self._stateclass = stateclass
-        self._entity_category = entity_category
-        self._name = f"Inverter {self._uid} {self._label}"
-        self._state = None
+    @callback
+    def handle_inverter_registration(data: dict[str, Any]):
+        """Handle inverter entity creation."""
+
+        # We have found an Inverter that is not registered in the device registry
+        # So, create all sensors described in INVERTER_SENSORS and
+        # INVERTER_CHANNEL_SENSORS
+
+        _LOGGER.debug("Registering New Inverter: %s", data)
+
+        ecu_id = data.get("ecu-id")
+        uid = data.get("uid")
+        device_identifiers = {(DOMAIN, f"inverter_{uid}")}
+
+        # Create device
+        device_registry = dr.async_get(hass)
+        device_registry.async_get_or_create(
+            config_entry_id=config_entry.entry_id,
+            identifiers=device_identifiers,
+            manufacturer="APSystems",
+            suggested_area="Roof",
+            name=f"Inverter {data.get('uid')}",
+            model=f"{data.get('model')}",
+        )
+
+        sensors = []
+        for sensor in INVERTER_SENSORS:
+            config = APSystemSensorConfig(
+                unique_id=f"{ecu_id}_{uid}_{slugify(sensor.name)}",
+                device_identifier=device_identifiers,
+                initial_value=SensorData(data=data.get(sensor.parameter)),
+            )
+            sensors.append(APSystemsSensor(sensor, config))
+
+        # Add Inverter channel sensors
+        for channel in range(data.get("channel_qty", 0)):
+            for sensor in INVERTER_CHANNEL_SENSORS:
+                config = APSystemSensorConfig(
+                    unique_id=f"{ecu_id}_{uid}_{slugify(sensor.name)}_{channel + 1}",
+                    device_identifier=device_identifiers,
+                    initial_value=SensorData(data=data.get(sensor.parameter)[channel]),
+                    name=f"{sensor.name} Ch {channel + 1}",
+                )
+                sensors.append(APSystemsSensor(sensor, config))
+
+        add_entities(sensors)
+
+    # Create listener for ecu or inverter registration.
+    # Called by update callback in APManager class.
+    # Allows dynamic creating of sensors.
+    async_dispatcher_connect(
+        hass,
+        f"{DOMAIN}_ecu_register",
+        handle_ecu_registration,
+    )
+    async_dispatcher_connect(
+        hass,
+        f"{DOMAIN}_inverter_register",
+        handle_inverter_registration,
+    )
+
+    # Restore sensors for this config entry that have been registered previously.
+    # Shows active sensors at startup even if no message from ECU yet received.
+    # Restored sensors have their values from when HA was previously shut down/restarted.
+    restore_sensors()
+
+
+class APSystemsSensor(RestoreSensor, SensorEntity):
+    """Base APSystems sensor class."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self, definition: APSystemSensorDefinition, config: APSystemSensorConfig
+    ) -> None:
+        """Initialise sensor."""
+        self._definition = definition
+        self._config = config
+
+        self._attr_device_class = definition.device_class
+        self._attr_device_info = DeviceInfo(identifiers=self._config.device_identifier)
+        self._attr_icon = definition.icon
+        self._attr_name = config.name or definition.name
+        self._attr_native_unit_of_measurement = definition.unit_of_measurement
+        self._attr_state_class = definition.state_class
+        self._attr_unique_id = self._config.unique_id
 
     @property
-    def unique_id(self):
-        field = self._field
-        if self._index != None:
-            field = f"{field}_{self._index}"
-        return f"{self._ecu}_{self._uid}_{field}"
+    def is_summation_sensor(self) -> bool:
+        """Is this a summation sensor."""
+        return (
+            hasattr(self, "_attr_extra_state_attributes")
+            and self._attr_extra_state_attributes.get(ATTR_SUMMATION_PERIOD)
+        ) or self._definition.summation_entity
 
-    @property
-    def device_class(self):
-        return self._devclass
+    async def async_added_to_hass(self) -> None:
+        """Run when entity about to be added to hass."""
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                f"{DOMAIN}_{self._config.unique_id}",
+                self.update_state,
+            )
+        )
+        if self._config.initial_value:
+            self.set_initial_value()
+        else:
+            await self.restore_state()
 
-    @property
-    def name(self):
-        return self._name
+    async def restore_state(self):
+        """Get restored state from store."""
+        if (state := await self.async_get_last_state()) is not None:
+            # Set unit of measurement in case user has changed this in UI
+            self._attr_unit_of_measurement = state.attributes.get(
+                ATTR_UNIT_OF_MEASUREMENT
+            )
+            self._attr_extra_state_attributes = state.attributes
 
-    @property
-    def state(self):
-        #_LOGGER.debug(f"State called for {self._field}")
-        try:
-            match self._field:
-                case "voltage":
-                    return self.coordinator.data.get("inverters", {}).get(self._uid, {}).get("voltage", [])[self._index]
-                case "power":
-                    return self.coordinator.data.get("inverters", {}).get(self._uid, {}).get("power", [])[self._index]
-                case "current":
-                    return self.coordinator.data.get("inverters", {}).get(self._uid, {}).get("current", [])[self._index]
-                case _:
-                    return self.coordinator.data.get("inverters", {}).get(self._uid, {}).get(self._field)
-        except Exception:
-            pass
+        if (state_data := await self.async_get_last_sensor_data()) is not None:
+            # Set our native values
+            if state_data.native_unit_of_measurement is not None:
+                self._attr_native_unit_of_measurement = (
+                    state_data.native_unit_of_measurement
+                )
+            if state_data.native_value is not None:
+                self._attr_native_value = state_data.native_value
 
-    @property
-    def icon(self):
-        return self._icon
+            _LOGGER.debug(
+                "Restored state for %s of %s with native uom %s and uom %s",
+                self.entity_id,
+                state_data.native_value,
+                state_data.native_unit_of_measurement,
+                self._attr_unit_of_measurement,
+            )
 
-    @property
-    def unit_of_measurement(self):
-        return self._unit
+    def set_initial_value(self):
+        """Set initial values on sensor creation."""
+        if self._config.initial_value is not None:
+            if self._definition.summation_entity:
+                self.set_summation_entity_attributes()
 
-    @property
-    def extra_state_attributes(self):
-        attrs = {
-            "ecu_id" : f"{self._ecu}",
-            "last_update" : f"{self.coordinator.data.get('timestamp')}",
+                if self._definition.summation_type == SummationType.SUM:
+                    self.native_value = 0
+                else:
+                    self.native_value = self._config.initial_value.data
+
+            elif (
+                self._definition.device_class == SensorDeviceClass.TIMESTAMP
+                and isinstance(self._config.initial_value.data, datetime)
+            ):
+                # Need to have a timezone for timestamp sensor
+                self.native_value = add_local_timezone(
+                    self.hass, self._config.initial_value.data
+                )
+            else:
+                self.native_value = self._config.initial_value.data
+
+    def set_summation_entity_attributes(self):
+        """Set initial base attribute values."""
+        self._attr_extra_state_attributes = {
+            ATTR_SUMMATION_PERIOD: self._definition.summation_period,
+            ATTR_SUMMATION_TYPE: self._definition.summation_type,
+            ATTR_SUMMATION_FACTOR: self._definition.summation_factor,
+            ATTR_TIMESTAMP: self._config.initial_value.attributes.get(ATTR_TIMESTAMP),
         }
-        return attrs
 
-    @property
-    def state_class(self):
-        #_LOGGER.debug(f"State class {self._stateclass} - {self._field}")
-        return self._stateclass
+    def update_attributes(self, attributes: dict[str, Any]):
+        """Update attribute values."""
+        current_attributes = self._attr_extra_state_attributes.copy()
+        current_attributes.update(attributes)
+        self._attr_extra_state_attributes = current_attributes
 
-    @property
-    def device_info(self):
-        parent = f"inverter_{self._uid}"
-        return {
-            "identifiers": {
-                (DOMAIN, parent),
-            }
-        }
+    @callback
+    def update_state(self, update_data: SensorData):
+        """Update sensor value."""
+        update_value = update_data.data
 
-    @property
-    def entity_category(self):
-        return self._entity_category
+        # If summation entity, calculate value
+        # This will error reading _attr_extra_state_attributes when sensor first created,
+        # so check.
+        if self.is_summation_sensor:
+            summation_period = self._attr_extra_state_attributes.get(
+                ATTR_SUMMATION_PERIOD
+            )
+            summation_type = self._attr_extra_state_attributes.get(ATTR_SUMMATION_TYPE)
+            summation_factor = self._attr_extra_state_attributes.get(
+                ATTR_SUMMATION_FACTOR
+            )
 
-class APSystemsECUSensor(CoordinatorEntity, SensorEntity):
+            current_timestamp = update_data.attributes.get(ATTR_TIMESTAMP)
+            last_timestamp = self._attr_extra_state_attributes.get(ATTR_TIMESTAMP)
+            # Convert base timestamp attribute from string if needed
+            if not isinstance(last_timestamp, datetime):
+                last_timestamp = dt_util.parse_datetime(last_timestamp)
 
-    def __init__(self, coordinator, ecu, field, label=None, icon=None, unit=None, devclass=None, stateclass=None, entity_category=None):
-        super().__init__(coordinator)
-        self.coordinator = coordinator
-# Hier worden de basis gegevens van de integratie (device info weergegeven)
-        self._ecu = self.coordinator.data.get('ecu-id')
-        self._field = field
-        self._label = label
-        if not label:
-            self._label = field
-        self._icon = icon
-        self._unit = unit
-        self._devclass = devclass
-        self._stateclass = stateclass
-        self._entity_category = entity_category
-        self._name = f"ECU {self._label}"
-        self._state = None
+            update_value, has_changed = self.summation_calculation(
+                summation_period,
+                summation_type,
+                summation_factor,
+                last_timestamp,
+                current_timestamp,
+                self.native_value,
+                update_value,
+            )
 
-    @property
-    def unique_id(self):
-        return f"{self._ecu}_{self._field}"
+            # Set timestamp if value changed
+            # To only update on min/max summation sensor if changed
+            if has_changed:
+                self.update_attributes({ATTR_TIMESTAMP: current_timestamp})
 
-    @property
-    def name(self):
-        return self._name
+        # Prevent updating total increasing sensors (ie historical energy sensors)
+        # with lower values.
+        if (
+            self.state_class == SensorStateClass.TOTAL_INCREASING
+            and update_value < self.native_value
+        ):
+            return
 
-    @property
-    def device_class(self):
-        return self._devclass
+        # Timestamp sensor needs a timezone.  As our timestamp data is timezone unaware,
+        # give it timezone.
+        if self.device_class == SensorDeviceClass.TIMESTAMP and isinstance(
+            update_value, datetime
+        ):
+            update_value = add_local_timezone(self.hass, update_value)
 
-    @property
-    def state(self):
-        #_LOGGER.debug(f"State called for {self._field}")
-        return self.coordinator.data.get(self._field)
+        _LOGGER.debug(
+            "Updating sensor: %s with value %s",
+            self.entity_id,
+            update_value,
+        )
+        self.native_value = update_value
+        self.async_write_ha_state()
 
-    @property
-    def icon(self):
-        return self._icon
+    def summation_calculation(
+        self,
+        summation_period: SummationPeriod,
+        summation_type: SummationType,
+        summation_factor: float,
+        last_timestamp: datetime,
+        current_timestamp: datetime,
+        current_value: float,
+        value: float,
+    ) -> int | float:
+        """Return summation value of value over time.
 
-    @property
-    def unit_of_measurement(self):
-        return self._unit
+        If change in period, calculates a value over time from start of new period with
+        max of MAX_STUB_INTERVAL.
 
-    @property
-    def extra_state_attributes(self):
-        attrs = {
-            "ecu_id" : f"{self._ecu}",
-            "last_update" : f"{self.coordinator.data.get('timestamp')}",
-        }
-        return attrs
+        If no change in period, assumes value persisted since last timestamp.
+        """
+        interval = (current_timestamp - last_timestamp).seconds
 
-    @property
-    def state_class(self):
-        #_LOGGER.debug(f"State class {self._stateclass} - {self._field}")
-        return self._stateclass
+        _LOGGER.debug(
+            "Summation values: Period: %s, Timestamp - last: %s, current: %s, Value - sensor: %s, current: %s",
+            summation_period,
+            last_timestamp,
+            current_timestamp,
+            current_value,
+            value,
+        )
 
-    @property
-    def device_info(self):
-        parent = f"ecu_{self._ecu}"
-        return {
-            "identifiers": {
-                (DOMAIN, parent),
-            }
-        }
+        sum_value = None
+        has_changed = False
 
-    @property
-    def entity_category(self):
-        return self._entity_category
+        # Has it crossed calculation period boundry?
+        if has_changed_period(summation_period, last_timestamp, current_timestamp):
+            # Set to last recorded value if new recording period
+            has_changed = True
+            if summation_type in [SummationType.MAX, SummationType.MIN]:
+                sum_value = value
+                _LOGGER.debug(
+                    "New summation period - Value: %f",
+                    sum_value,
+                )
+            elif summation_type == SummationType.SUM:
+                # Calculate portion of current value to set as start value
+                new_period_interval = max(
+                    (
+                        current_timestamp
+                        - get_period_start_timestamp(
+                            summation_period, current_timestamp
+                        )
+                    ).total_seconds(),
+                    MAX_STUB_INTERVAL,
+                )
+                sum_value = round(
+                    int(value * (new_period_interval / 3600)) / summation_factor, 2
+                )
+                _LOGGER.debug(
+                    "New summation period - Period interval(s): %i, Value: %f",
+                    new_period_interval,
+                    sum_value,
+                )
+        else:
+            sum_value = current_value
+            if (
+                summation_type == SummationType.MAX
+                and value >= current_value
+                or summation_type == SummationType.MIN
+                and value <= current_value
+            ):
+                sum_value = value
+                has_changed = True
+            elif summation_type == SummationType.SUM:
+                has_changed = True
+                sum_value = round(
+                    (current_value + int(value * (interval / 3600)) / summation_factor),
+                    2,
+                )
+
+            _LOGGER.debug(
+                "Same summation period - Period interval(s): %s, Value: %f",
+                interval,
+                sum_value,
+            )
+
+        return sum_value, has_changed
