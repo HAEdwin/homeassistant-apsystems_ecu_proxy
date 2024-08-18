@@ -15,7 +15,7 @@ The optained data is then being analyzed for use in Home Assistant so it doesn't
 ## Install the integration
 
 ## Rewrite DNS traffic
-Use PiHole, AdGuard of Unifi (or any other preferred method) to rewrite DNS. For example in AdGuard: Navigate to > Filters > DNS Rewrites > Add DNS rewrite > For domain name enter: ecu.apsystemsema.com > for IP-address enter: IP-address where the integration runs
+Use PiHole, AdGuard of Unifi (or any other preferred method) to rewrite DNS. For example in AdGuard: Navigate to > Filters > DNS Rewrites > Add DNS rewrite > For domain name enter: ecu.apsystemsema.com > for IP-address enter: IP-address where the integration runs.
 Within 6 minutes data should be received by the integration and entities will appear.
 
 ## Available sensors
