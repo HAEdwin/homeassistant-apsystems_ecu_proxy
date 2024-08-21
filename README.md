@@ -6,7 +6,7 @@
 ## Main purpose
 This integration intercepts and collects data from your APsystems driven PV installation. 
 The data from the ***E***nergy ***C***ommunication ***U***nit is first being received by this integration and then passed on to APsystems ***E***nergy ***M***onitoring and ***A***nalysis website.
-The optained data is then being analyzed for use in Home Assistant so it doesn't disturb the regular process of the ECU sending data to EMA.
+The optained data is then being analyzed for use in Home Assistant so it doesn't disturb the regular process of the ECU sending data to EMA and vice versa.
 
 ## Prerequisites
 - An APsystems ECU device starting with ECU-ID 2160 (might be compatible with other ECU types, I don't know yet but suppose it will - if it does not let me know and show me some logging!)
