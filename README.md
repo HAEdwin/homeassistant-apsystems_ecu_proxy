@@ -2,6 +2,7 @@
 # APsystems ECU Proxy
 
 ### &#x1F534; This integration is under construction
+Works and tested with the ECU-R (2160....) if the integration works for your ECU, please let me know!
 
 ## Main purpose
 This integration intercepts and collects data from your APsystems driven PV installation. 
