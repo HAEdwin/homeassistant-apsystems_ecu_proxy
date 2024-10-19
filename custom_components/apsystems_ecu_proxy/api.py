@@ -8,7 +8,9 @@ import re
 import traceback
 from typing import Any
 
-from .const import EMA_HOST, MESSAGE_IGNORE_AGE, SEND_TO_EMA
+from .const import EMA_HOST, MESSAGE_IGNORE_AGE, SEND_TO_EMA, DOMAIN, START_T_TIME, END_T_TIME
+from .sensor import ECU_SENSORS, INVERTER_CHANNEL_SENSORS, INVERTER_SENSORS, SensorData
+from .helpers import slugify
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -112,69 +114,50 @@ class MySocketAPI:
                     response = await self.send_data_to_ema(self.port, data)
                     await self.send_data_to_ecu(writer, response)
 
-                # Initial message filters
-                # Filter message type we are not interested in.
-                prefixes = {"APS18AA": 7,"APS13AAA": 8}
-                if not any(message.startswith(prefix) for prefix in prefixes):
-                    _LOGGER.debug("Received message type from ECU ignored for further processing\n")
-                    return None
-                # From valid messages, filter messages if checksum is invalid.
-                for prefix, length in prefixes.items():
-                    if message.startswith(prefix) and int(message[length:10]) != len(message) - 1:
-                        _LOGGER.warning("Checksum error - sum: %s, len: %s, message: %s", message[length:10], len(message) - 1, message)
-                        return None
-
-                # Process data of valid messages
-                # If inverters-down message is received, stop graphs and continue (but needs valid ecu_mem)
-                # Beter is om de entiteiten te achterhalen en die op nul te zetten
-                if message.startswith("APS13AAA"): 
-                    if bool(self.ecu_mem) == True:
-                        self.ecu_mem["timestamp"] = datetime.now().replace(microsecond=0) - timedelta(minutes=5)
-                        self.ecu_mem["current_power"] = 0
-                        self.ecu_mem["qty_of_online_inverters"] = 0
-                        for inverter in self.ecu_mem["inverters"].values():
-                            inverter["power"] = [0] * len(inverter["power"])
-                            inverter["voltage"] = [0] * len(inverter["voltage"])
-                            inverter["current"] = [0] * len(inverter["current"])
-                            inverter["temperature"] = None
-                            inverter["frequency"] = 0.0
-                        _LOGGER.debug(f"Set to zero...")
-                        self.callback(self.ecu_mem)
-                        continue
-                    else:
-                        return None
-
-
-                # Get & interpret ECU data
-                # We can get old but valid messages from the ECU which provide older data to EMA.
-                # We should ignore these if older than 10 mins.
-                ecu["timestamp"] = datetime.strptime(message[60:74], "%Y%m%d%H%M%S")
-                if (
-                    message_age := (datetime.now() - ecu["timestamp"]).total_seconds()
-                ) > MESSAGE_IGNORE_AGE:
-                    _LOGGER.debug(
-                        "Message told old, ignoring.  Age is %s", int(message_age)
+                # MessageFilter: whitelist data message and message checksum
+                if not message.startswith("APS18AA") or int(message[7:10]) != len(message) - 1:
+                    _LOGGER.warning(
+                        "Ignored message from ECU @ %s on port %s - %s", addr[0], self.port, message.replace("\n", "") if not message.startswith("APS18AA") 
+                        else f"Checksum error - sum: {message[7:10]}, len: {len(message) - 1}"
                     )
-                    continue
+                    return None
 
+                _LOGGER.warning(
+                    "Processing message from ECU @ %s on port %s - %s", addr[0], self.port, message.replace("\n", "")
+                )
+                # Get & interpret ECU data
                 ecu["ecu-id"] = message[18:30]
                 ecu["model"] = self.get_model(message[18:22])
                 ecu["lifetime_energy"] = int(message[42:60]) / 10
                 ecu["current_power"] = int(message[30:42]) / 100
                 ecu["qty_of_online_inverters"] = int(message[74:77])
                 ecu["inverters"] = self.get_inverters(ecu["ecu-id"], message)
-
-                # Memorize latest ECU data for graph and call callback to send the data
-                self.ecu_mem = ecu
+                ecu["timestamp"] = datetime.strptime(message[60:74], "%Y%m%d%H%M%S")
+                
+                # When 5 minute update interval expires, stop graphs
+                if (
+                    message_age := (datetime.now() - ecu["timestamp"]).total_seconds()
+                ) > MESSAGE_IGNORE_AGE:
+                    _LOGGER.warning("Message told old with %s sec, stopping graphs", int(message_age))
+                    ecu["timestamp"] = datetime.now().replace(microsecond=0)
+                    ecu["current_power"] = 0
+                    ecu["qty_of_online_inverters"] = 0
+                    # Iterate through each inverter and update the values
+                    for inverter in ecu["inverters"].values():
+                        inverter['frequency'] = 0
+                        inverter['power'] = [0] * len(inverter['power'])
+                        inverter['voltage'] = [0] * len(inverter['voltage'])
+                        inverter['current'] = [0] * len(inverter['current'])
+                        inverter["temperature"] = None
+                        inverter["frequency"] = 0.0
                 self.callback(ecu)
             except ConnectionResetError:
                 _LOGGER.warning("Error: Connection was reset")
-            except Exception as error:
-                _LOGGER.warning("Exception error with %s", error)
+            #except Exception as error:
+            #    _LOGGER.warning("Exception error with %s", error)
             #alternative
-            #except Exception:
-                #_LOGGER.warning("Exception error with %s", traceback.format_exc())
-            
+            except Exception:
+                _LOGGER.warning("Exception error with %s", traceback.format_exc())
 
     def get_model(self, model_code: str) -> str:
         """Get model from model code."""
