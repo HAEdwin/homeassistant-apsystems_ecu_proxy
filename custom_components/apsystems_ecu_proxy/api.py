@@ -20,8 +20,6 @@ ECU_MODELS_216 = {
 }
 
 ECU_MODELS_215 = {"215": "ECU-C"}
-
-
 YC500_MODEL_CODES = ["403", "404"]
 YC600_MODEL_CODES = ["406", "407", "408", "409", "703", "706"]
 QS1_MODEL_CODES = ["801", "802", "805", "806"]
@@ -53,7 +51,6 @@ INVERTER_MODELS = [
         "model_codes": YC1000_MODEL_CODES,
     },
 ]
-
 
 class MySocketAPI:
     """API class."""
@@ -132,7 +129,7 @@ class MySocketAPI:
                 ecu["qty_of_online_inverters"] = int(message[74:77])
                 ecu["inverters"] = self.get_inverters(ecu["ecu-id"], message)
                 ecu["timestamp"] = datetime.strptime(message[60:74], "%Y%m%d%H%M%S")
-                
+
                 # When 5 minute update interval expires, stop graphs
                 if (
                     message_age := (datetime.now() - ecu["timestamp"]).total_seconds()
