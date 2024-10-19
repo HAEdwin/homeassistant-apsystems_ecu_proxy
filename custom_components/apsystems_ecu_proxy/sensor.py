@@ -416,10 +416,21 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
                 self.update_state,
             )
         )
+        """Restore state."""
         if self._config.initial_value:
             self.set_initial_value()
         else:
             await self.restore_state()
+
+        """Dispatcher Listener for midnight reset."""
+        if self.is_summation_sensor:
+            self.async_on_remove(
+                async_dispatcher_connect(
+                    self.hass,
+                    f"{DOMAIN}_midnight_reset",
+                    self.update_state,
+                )
+            )
 
     async def restore_state(self):
         """Get restored state from store."""
@@ -556,22 +567,20 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
         value: float,
     ) -> int | float:
         """Return summation value of value over time.
-
         If change in period, calculates a value over time from start of new period with
         max of MAX_STUB_INTERVAL.
-
         If no change in period, assumes value persisted since last timestamp.
         """
-        interval = (current_timestamp - last_timestamp).seconds
-
         _LOGGER.debug(
-            "Summation values: Period: %s, Timestamp - last: %s, current: %s, Value - sensor: %s, current: %s",
+            "Summation values: Period: %s, Timestamp - current: %s, last: %s, Value - sensor: %s, current: %s",
             summation_period,
-            last_timestamp,
-            current_timestamp,
+            current_timestamp.replace(tzinfo=None),
+            last_timestamp.replace(tzinfo=None),
             current_value,
             value,
         )
+        """Removing TZ info enables maths on mixed TZ-aware or TZ-naive values used."""
+        interval = (current_timestamp.replace(tzinfo=None) - last_timestamp.replace(tzinfo=None)).seconds
 
         sum_value = None
         has_changed = False
