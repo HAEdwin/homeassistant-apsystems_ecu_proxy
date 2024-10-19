@@ -1,4 +1,4 @@
-"""API to interact with APsystems ECU."""
+ug"""API to interact with APsystems ECU."""
 
 import asyncio
 from collections.abc import Callable
@@ -112,13 +112,13 @@ class MySocketAPI:
 
                 # MessageFilter: whitelist data message and message checksum
                 if not message.startswith("APS18AA") or int(message[7:10]) != len(message) - 1:
-                    _LOGGER.warning(
+                    _LOGGER.debug(
                         "Ignored message from ECU @ %s on port %s - %s", addr[0], self.port, message.replace("\n", "") if not message.startswith("APS18AA") 
                         else f"Checksum error - sum: {message[7:10]}, len: {len(message) - 1}"
                     )
                     return None
 
-                _LOGGER.warning(
+                _LOGGER.debug(
                     "Processing message from ECU @ %s on port %s - %s", addr[0], self.port, message.replace("\n", "")
                 )
                 # Get & interpret ECU data
@@ -134,7 +134,7 @@ class MySocketAPI:
                 if (
                     message_age := (datetime.now() - ecu["timestamp"]).total_seconds()
                 ) > MESSAGE_IGNORE_AGE:
-                    _LOGGER.warning("Message told old with %s sec, stopping graphs", int(message_age))
+                    _LOGGER.debug("Message told old with %s sec, stopping graphs", int(message_age))
                     ecu["timestamp"] = datetime.now().replace(microsecond=0)
                     ecu["current_power"] = 0
                     ecu["qty_of_online_inverters"] = 0
