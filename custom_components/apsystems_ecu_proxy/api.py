@@ -1,4 +1,4 @@
-ug"""API to interact with APsystems ECU."""
+"""API to interact with APsystems ECU."""
 
 import asyncio
 from collections.abc import Callable
