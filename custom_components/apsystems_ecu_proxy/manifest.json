@@ -15,5 +15,5 @@
     "integration_type": "hub",
     "iot_class": "local_push",
     "single_config_entry": true,
-    "version": "v0.1.0"
+    "version": "v0.2.1"
 }
