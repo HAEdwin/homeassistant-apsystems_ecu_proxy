@@ -9,6 +9,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.event import async_track_utc_time_change
+from homeassistant.util.dt import as_local
+from datetime import datetime
 
 from .api import MySocketAPI
 from .const import ATTR_INVERTERS, ATTR_TIMESTAMP, DOMAIN, SOCKET_PORTS
@@ -40,11 +43,15 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry):
 async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Unload a config entry."""
 
-    # Stop socket servers
-    api_handlder: APIManager = hass.data[DOMAIN][config_entry.entry_id]["api_handler"]
-    await api_handlder.async_shutdown()
+    # Stop socket servers.
+    api_handler: APIManager = hass.data[DOMAIN][config_entry.entry_id]["api_handler"]
+    await api_handler.async_shutdown()
 
-    # Unload platforms
+    # Cancel the midnight tracker.
+    await api_handler.midnight_tracker_unregister()
+    #self.midnight_tracker_unregister()
+
+    # Unload platforms.
     unload_ok = await hass.config_entries.async_unload_platforms(
         config_entry, PLATFORMS
     )
@@ -82,6 +89,20 @@ class APIManager:
         """Initialize coordinator."""
         self.hass = hass
         self.config_entry = config_entry
+        # Add listener for midnight reset.
+        self.midnight_tracker_unregister = async_track_utc_time_change(hass, self.midnight_reset, "0", "0", "0", local=True)
+
+    async def midnight_reset(self, *args):
+        _LOGGER.warning("midnight reset")
+        attribute_values = {}
+        """Send dispatcher message to all listeners to reset."""
+        attribute_values[ATTR_TIMESTAMP] = as_local(datetime.now())
+        self._request_sensor_to_update(
+            f"{DOMAIN}_midnight_reset",
+            SensorData(
+                data=0, attributes=attribute_values
+            ),
+        )
 
     async def setup_socket_servers(self) -> None:
         """Initialise socket server."""
