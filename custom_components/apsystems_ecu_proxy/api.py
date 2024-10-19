@@ -9,7 +9,6 @@ import traceback
 from typing import Any
 
 from .const import EMA_HOST, MESSAGE_IGNORE_AGE, SEND_TO_EMA
-from .sensor import ECU_SENSORS, INVERTER_CHANNEL_SENSORS, INVERTER_SENSORS, SensorData
 from .helpers import slugify
 
 _LOGGER = logging.getLogger(__name__)
