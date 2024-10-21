@@ -95,6 +95,7 @@ class APSystemSensorDefinition:
     summation_period: SummationPeriod | None = None
     summation_type: SummationType | None = None
     summation_factor: float = 1
+    value_if_no_update: int | str | None = -1
 
 
 ECU_SENSORS: tuple[APSystemSensorDefinition, ...] = (
@@ -104,6 +105,7 @@ ECU_SENSORS: tuple[APSystemSensorDefinition, ...] = (
         parameter="current_power",
         device_class=SensorDeviceClass.POWER,
         unit_of_measurement=UnitOfPower.WATT,
+        value_if_no_update=0,
     ),
     APSystemSensorDefinition(
         name="Hourly Energy Production",
@@ -172,6 +174,7 @@ ECU_SENSORS: tuple[APSystemSensorDefinition, ...] = (
     APSystemSensorDefinition(
         name="Inverters Online",
         parameter="qty_of_online_inverters",
+        value_if_no_update=0,
     ),
     APSystemSensorDefinition(
         name="Last Update",
@@ -188,6 +191,7 @@ INVERTER_SENSORS: tuple[APSystemSensorDefinition, ...] = (
         device_class=SensorDeviceClass.TEMPERATURE,
         unit_of_measurement=UnitOfTemperature.CELSIUS,
         entity_category=EntityCategory.DIAGNOSTIC,
+        value_if_no_update=0,
     ),
     APSystemSensorDefinition(
         name="Frequency",
@@ -195,6 +199,7 @@ INVERTER_SENSORS: tuple[APSystemSensorDefinition, ...] = (
         device_class=SensorDeviceClass.FREQUENCY,
         unit_of_measurement=UnitOfFrequency.HERTZ,
         entity_category=EntityCategory.DIAGNOSTIC,
+        value_if_no_update=0,
     ),
 )
 
@@ -205,6 +210,7 @@ INVERTER_CHANNEL_SENSORS: tuple[APSystemSensorDefinition, ...] = (
         device_class=SensorDeviceClass.POWER,
         unit_of_measurement=UnitOfPower.WATT,
         entity_category=EntityCategory.DIAGNOSTIC,
+        value_if_no_update=0,
     ),
     APSystemSensorDefinition(
         name="Voltage",
@@ -212,6 +218,7 @@ INVERTER_CHANNEL_SENSORS: tuple[APSystemSensorDefinition, ...] = (
         device_class=SensorDeviceClass.VOLTAGE,
         unit_of_measurement=UnitOfElectricPotential.VOLT,
         entity_category=EntityCategory.DIAGNOSTIC,
+        value_if_no_update=0,
     ),
     APSystemSensorDefinition(
         name="Current",
@@ -219,6 +226,7 @@ INVERTER_CHANNEL_SENSORS: tuple[APSystemSensorDefinition, ...] = (
         device_class=SensorDeviceClass.CURRENT,
         unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         entity_category=EntityCategory.DIAGNOSTIC,
+        value_if_no_update=0,
     ),
 )
 
@@ -407,6 +415,10 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
             and self._attr_extra_state_attributes.get(ATTR_SUMMATION_PERIOD)
         ) or self._definition.summation_entity
 
+    def no_update_value(self) -> str | int | None:
+        """Is this a reset on no update sensor."""
+        return self._attr_extra_state_attributes.get(ATTR_VALUE_IF_NO_UPDATE, -1) 
+
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added to hass."""
         self.async_on_remove(
@@ -431,6 +443,21 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
                     self.update_state,
                 )
             )
+
+        """Dispatcher Listener for 0 or None then no update."""
+        if self.no_update_value != -1:
+            self.async_on_remove(
+                async_dispatcher_connect(
+                    self.hass,
+                    f"{DOMAIN}_no_update",
+                    self.set_no_update_value,
+                )
+            )
+
+    async def set_no_update_value(self):
+        """Set no update value."""
+        self.native_value = self.no_update_value
+        self.async_write_ha_state()
 
     async def restore_state(self):
         """Get restored state from store."""
