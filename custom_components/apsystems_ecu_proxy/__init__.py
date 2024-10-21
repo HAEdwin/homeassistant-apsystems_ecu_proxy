@@ -9,9 +9,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.event import async_track_utc_time_change
+from homeassistant.helpers.event import async_track_utc_time_change, async_call_later
 from homeassistant.util.dt import as_local
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .api import MySocketAPI
 from .const import ATTR_INVERTERS, ATTR_TIMESTAMP, DOMAIN, SOCKET_PORTS
@@ -91,9 +91,11 @@ class APIManager:
         self.config_entry = config_entry
         # Add listener for midnight reset.
         self.midnight_tracker_unregister = async_track_utc_time_change(hass, self.midnight_reset, "0", "0", "0", local=True)
+        # Add listener for 0 or None if no update.
+        self.no_update_timer_unregister = None
 
     async def midnight_reset(self, *args):
-        _LOGGER.warning("midnight reset")
+        _LOGGER.debug("midnight reset")
         attribute_values = {}
         """Send dispatcher message to all listeners to reset."""
         attribute_values[ATTR_TIMESTAMP] = as_local(datetime.now())
@@ -128,6 +130,12 @@ class APIManager:
     def async_update_callback(self, data: dict[str, Any]):
         """Dispatcher version of update callback."""
 
+        # Cancel no update timer as have update.
+        if self.no_update_timer_unregister:
+            _LOGGER.warning("No update timer")
+            self.no_update_timer_unregister()
+            self.no_update_timer_unregister = None
+        
         ecu_id = data.get("ecu-id")
 
         # Check if ECU is registered in devices
@@ -187,6 +195,7 @@ class APIManager:
                             except (ValueError, IndexError):
                                 _LOGGER.warning("There was a value or index error")
                                 continue
+        #self.no_update_timer_unregister = async_call_later(self.hass, timedelta(seconds = 120), self.fire_no_update) #360
 
     def _request_sensor_to_update(self, channel_id: str, data: Any):
         """Send a dispatch message to update sensor."""
@@ -196,3 +205,10 @@ class APIManager:
             data,
         )
         async_dispatcher_send(self.hass, channel_id, data)
+
+    async def fire_no_update(self, *args):
+        """Update no_update sensors."""
+        async_dispatcher_send(
+            self.hass,
+            f"{DOMAIN}_no_update",
+        )
