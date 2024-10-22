@@ -2,14 +2,13 @@
 
 import asyncio
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 import re
 import traceback
 from typing import Any
 
 from .const import EMA_HOST, MESSAGE_IGNORE_AGE, SEND_TO_EMA
-from .helpers import slugify
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,6 +51,7 @@ INVERTER_MODELS = [
     },
 ]
 
+
 class MySocketAPI:
     """API class."""
 
@@ -78,9 +78,10 @@ class MySocketAPI:
     async def stop(self):
         """Stop server."""
         self.serve = False
-        self.server.close()
-        await self.server.wait_closed()
-        _LOGGER.debug("Server for port %s stopped", self.port)
+        if self.server:
+            self.server.close()
+            await self.server.wait_closed()
+            _LOGGER.debug("Server for port %s stopped", self.port)
 
     async def data_received(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -98,10 +99,13 @@ class MySocketAPI:
                     return
 
                 message = data.decode("utf-8")
-                
+
                 addr = writer.get_extra_info("peername")
                 _LOGGER.debug(
-                    "From ECU @ %s on port %s - %s", addr[0], self.port, message.replace("\n", "")
+                    "From ECU @ %s on port %s - %s",
+                    addr[0],
+                    self.port,
+                    message.replace("\n", ""),
                 )
 
                 # Send data to EMA and send response from EMA to ECU
@@ -111,15 +115,25 @@ class MySocketAPI:
                     await self.send_data_to_ecu(writer, response)
 
                 # MessageFilter: whitelist data message and message checksum
-                if not message.startswith("APS18AA") or int(message[7:10]) != len(message) - 1:
+                if (
+                    not message.startswith("APS18AA")
+                    or int(message[7:10]) != len(message) - 1
+                ):
                     _LOGGER.debug(
-                        "Ignored message from ECU @ %s on port %s - %s", addr[0], self.port, message.replace("\n", "") if not message.startswith("APS18AA") 
-                        else f"Checksum error - sum: {message[7:10]}, len: {len(message) - 1}"
+                        "Ignored message from ECU @ %s on port %s - %s",
+                        addr[0],
+                        self.port,
+                        message.replace("\n", "")
+                        if not message.startswith("APS18AA")
+                        else f"Checksum error - sum: {message[7:10]}, len: {len(message) - 1}",
                     )
                     return None
 
                 _LOGGER.debug(
-                    "Processing message from ECU @ %s on port %s - %s", addr[0], self.port, message.replace("\n", "")
+                    "Processing message from ECU @ %s on port %s - %s",
+                    addr[0],
+                    self.port,
+                    message.replace("\n", ""),
                 )
                 # Get & interpret ECU data
                 ecu["ecu-id"] = message[18:30]
@@ -134,25 +148,28 @@ class MySocketAPI:
                 if (
                     message_age := (datetime.now() - ecu["timestamp"]).total_seconds()
                 ) > MESSAGE_IGNORE_AGE:
-                    _LOGGER.debug("Message told old with %s sec, stopping graphs", int(message_age))
+                    _LOGGER.debug(
+                        "Message told old with %s sec, stopping graphs",
+                        int(message_age),
+                    )
                     ecu["timestamp"] = datetime.now().replace(microsecond=0)
                     ecu["current_power"] = 0
                     ecu["qty_of_online_inverters"] = 0
                     # Iterate through each inverter and update the values
                     for inverter in ecu["inverters"].values():
-                        inverter['frequency'] = 0
-                        inverter['power'] = [0] * len(inverter['power'])
-                        inverter['voltage'] = [0] * len(inverter['voltage'])
-                        inverter['current'] = [0] * len(inverter['current'])
+                        inverter["frequency"] = 0
+                        inverter["power"] = [0] * len(inverter["power"])
+                        inverter["voltage"] = [0] * len(inverter["voltage"])
+                        inverter["current"] = [0] * len(inverter["current"])
                         inverter["temperature"] = None
                         inverter["frequency"] = 0.0
                 self.callback(ecu)
             except ConnectionResetError:
                 _LOGGER.warning("Error: Connection was reset")
-            #except Exception as error:
+            # except Exception as error:
             #    _LOGGER.warning("Exception error with %s", error)
-            #alternative
-            except Exception:
+            # alternative
+            except Exception:  # noqa: BLE001
                 _LOGGER.warning("Exception error with %s", traceback.format_exc())
 
     def get_model(self, model_code: str) -> str:
