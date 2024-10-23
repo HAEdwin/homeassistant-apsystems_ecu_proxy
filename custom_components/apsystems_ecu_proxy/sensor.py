@@ -36,6 +36,7 @@ from .const import (
     ATTR_SUMMATION_PERIOD,
     ATTR_SUMMATION_TYPE,
     ATTR_TIMESTAMP,
+    ATTR_VALUE_IF_NO_UPDATE,
     DOMAIN,
     MAX_STUB_INTERVAL,
     SOLAR_ICON,
@@ -309,6 +310,10 @@ async def async_setup_entry(
             initial_attribute_values = {}
             if sensor.summation_entity:
                 initial_attribute_values[ATTR_TIMESTAMP] = data.get(ATTR_TIMESTAMP)
+            if sensor.value_if_no_update != -1:
+                initial_attribute_values[ATTR_VALUE_IF_NO_UPDATE] = (
+                    sensor.value_if_no_update
+                )
 
             config = APSystemSensorConfig(
                 unique_id=f"{ecu_id}_{slugify(sensor.name)}",
@@ -347,20 +352,39 @@ async def async_setup_entry(
 
         sensors = []
         for sensor in INVERTER_SENSORS:
+            initial_attribute_values = {}
+            if sensor.summation_entity:
+                initial_attribute_values[ATTR_TIMESTAMP] = data.get(ATTR_TIMESTAMP)
+            if sensor.value_if_no_update != -1:
+                initial_attribute_values[ATTR_VALUE_IF_NO_UPDATE] = (
+                    sensor.value_if_no_update
+                )
             config = APSystemSensorConfig(
                 unique_id=f"{ecu_id}_{uid}_{slugify(sensor.name)}",
                 device_identifier=device_identifiers,
-                initial_value=SensorData(data=data.get(sensor.parameter)),
+                initial_value=SensorData(
+                    data=data.get(sensor.parameter), attributes=initial_attribute_values
+                ),
             )
             sensors.append(APSystemsSensor(sensor, config))
 
         # Add Inverter channel sensors
         for channel in range(data.get("channel_qty", 0)):
             for sensor in INVERTER_CHANNEL_SENSORS:
+                initial_attribute_values = {}
+                if sensor.summation_entity:
+                    initial_attribute_values[ATTR_TIMESTAMP] = data.get(ATTR_TIMESTAMP)
+                if sensor.value_if_no_update != -1:
+                    initial_attribute_values[ATTR_VALUE_IF_NO_UPDATE] = (
+                        sensor.value_if_no_update
+                    )
                 config = APSystemSensorConfig(
                     unique_id=f"{ecu_id}_{uid}_{slugify(sensor.name)}_{channel + 1}",
                     device_identifier=device_identifiers,
-                    initial_value=SensorData(data=data.get(sensor.parameter)[channel]),
+                    initial_value=SensorData(
+                        data=data.get(sensor.parameter)[channel],
+                        attributes=initial_attribute_values,
+                    ),
                     name=f"{sensor.name} Ch {channel + 1}",
                 )
                 sensors.append(APSystemsSensor(sensor, config))
@@ -391,6 +415,7 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
     """Base APSystems sensor class."""
 
     _attr_has_entity_name = True
+    _attr_extra_state_attributes = {}
 
     def __init__(
         self, definition: APSystemSensorDefinition, config: APSystemSensorConfig
@@ -415,9 +440,10 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
             and self._attr_extra_state_attributes.get(ATTR_SUMMATION_PERIOD)
         ) or self._definition.summation_entity
 
+    @property
     def no_update_value(self) -> str | int | None:
         """Is this a reset on no update sensor."""
-        return self._attr_extra_state_attributes.get(ATTR_VALUE_IF_NO_UPDATE, -1) 
+        return self._attr_extra_state_attributes.get(ATTR_VALUE_IF_NO_UPDATE, -1)
 
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added to hass."""
@@ -428,13 +454,13 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
                 self.update_state,
             )
         )
-        """Restore state."""
+        # Restore state
         if self._config.initial_value:
             self.set_initial_value()
         else:
             await self.restore_state()
 
-        """Dispatcher Listener for midnight reset."""
+        # Dispatcher Listener for midnight reset
         if self.is_summation_sensor:
             self.async_on_remove(
                 async_dispatcher_connect(
@@ -444,7 +470,7 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
                 )
             )
 
-        """Dispatcher Listener for 0 or None then no update."""
+        # Dispatcher Listener for 0 or None then no update
         if self.no_update_value != -1:
             self.async_on_remove(
                 async_dispatcher_connect(
@@ -456,7 +482,7 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
 
     async def set_no_update_value(self):
         """Set no update value."""
-        self.native_value = self.no_update_value
+        self._attr_native_value = self.no_update_value
         self.async_write_ha_state()
 
     async def restore_state(self):
@@ -488,33 +514,41 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
     def set_initial_value(self):
         """Set initial values on sensor creation."""
         if self._config.initial_value is not None:
+            if self._definition.value_if_no_update != -1:
+                self.update_attributes(
+                    {ATTR_VALUE_IF_NO_UPDATE: self._definition.value_if_no_update}
+                )
             if self._definition.summation_entity:
                 self.set_summation_entity_attributes()
 
                 if self._definition.summation_type == SummationType.SUM:
-                    self.native_value = 0
+                    self._attr_native_value = 0
                 else:
-                    self.native_value = self._config.initial_value.data
+                    self._attr_native_value = self._config.initial_value.data
 
             elif (
                 self._definition.device_class == SensorDeviceClass.TIMESTAMP
                 and isinstance(self._config.initial_value.data, datetime)
             ):
                 # Need to have a timezone for timestamp sensor
-                self.native_value = add_local_timezone(
+                self._attr_native_value = add_local_timezone(
                     self.hass, self._config.initial_value.data
                 )
             else:
-                self.native_value = self._config.initial_value.data
+                self._attr_native_value = self._config.initial_value.data
 
     def set_summation_entity_attributes(self):
         """Set initial base attribute values."""
-        self._attr_extra_state_attributes = {
-            ATTR_SUMMATION_PERIOD: self._definition.summation_period,
-            ATTR_SUMMATION_TYPE: self._definition.summation_type,
-            ATTR_SUMMATION_FACTOR: self._definition.summation_factor,
-            ATTR_TIMESTAMP: self._config.initial_value.attributes.get(ATTR_TIMESTAMP),
-        }
+        self.update_attributes(
+            {
+                ATTR_SUMMATION_PERIOD: self._definition.summation_period,
+                ATTR_SUMMATION_TYPE: self._definition.summation_type,
+                ATTR_SUMMATION_FACTOR: self._definition.summation_factor,
+                ATTR_TIMESTAMP: self._config.initial_value.attributes.get(
+                    ATTR_TIMESTAMP
+                ),
+            }
+        )
 
     def update_attributes(self, attributes: dict[str, Any]):
         """Update attribute values."""
@@ -560,6 +594,15 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
             if has_changed:
                 self.update_attributes({ATTR_TIMESTAMP: current_timestamp})
 
+        # Update value if no update attribute to allow changes to definition to take effect
+        if update_data.attributes.get(ATTR_VALUE_IF_NO_UPDATE):
+            self.update_attributes(
+                {
+                    ATTR_VALUE_IF_NO_UPDATE,
+                    update_data.attributes.get(ATTR_VALUE_IF_NO_UPDATE),
+                }
+            )
+
         # Prevent updating total increasing sensors (ie historical energy sensors)
         # with lower values.
         if (
@@ -580,7 +623,7 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
             self.entity_id,
             update_value,
         )
-        self.native_value = update_value
+        self._attr_native_value = update_value
         self.async_write_ha_state()
 
     def summation_calculation(
@@ -594,6 +637,7 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
         value: float,
     ) -> int | float:
         """Return summation value of value over time.
+
         If change in period, calculates a value over time from start of new period with
         max of MAX_STUB_INTERVAL.
         If no change in period, assumes value persisted since last timestamp.
@@ -606,8 +650,11 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
             current_value,
             value,
         )
-        """Removing TZ info enables maths on mixed TZ-aware or TZ-naive values used."""
-        interval = (current_timestamp.replace(tzinfo=None) - last_timestamp.replace(tzinfo=None)).seconds
+
+        # Removing TZ info enables maths on mixed TZ-aware or TZ-naive values used
+        interval = (
+            current_timestamp.replace(tzinfo=None) - last_timestamp.replace(tzinfo=None)
+        ).seconds
 
         sum_value = None
         has_changed = False

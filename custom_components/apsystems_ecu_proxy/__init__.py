@@ -1,5 +1,6 @@
 """Initialise Module for ECU Proxy."""
 
+from datetime import datetime, timedelta
 import logging
 from typing import Any
 
@@ -9,12 +10,18 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.event import async_track_utc_time_change, async_call_later
+from homeassistant.helpers.event import async_call_later, async_track_utc_time_change
 from homeassistant.util.dt import as_local
-from datetime import datetime, timedelta
 
 from .api import MySocketAPI
-from .const import ATTR_INVERTERS, ATTR_TIMESTAMP, DOMAIN, SOCKET_PORTS
+from .const import (
+    ATTR_INVERTERS,
+    ATTR_TIMESTAMP,
+    ATTR_VALUE_IF_NO_UPDATE,
+    DOMAIN,
+    NO_UPDATE_TIMEOUT,
+    SOCKET_PORTS,
+)
 from .helpers import slugify
 from .sensor import ECU_SENSORS, INVERTER_CHANNEL_SENSORS, INVERTER_SENSORS, SensorData
 
@@ -47,10 +54,6 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> 
     api_handler: APIManager = hass.data[DOMAIN][config_entry.entry_id]["api_handler"]
     await api_handler.async_shutdown()
 
-    # Cancel the midnight tracker.
-    await api_handler.midnight_tracker_unregister()
-    #self.midnight_tracker_unregister()
-
     # Unload platforms.
     unload_ok = await hass.config_entries.async_unload_platforms(
         config_entry, PLATFORMS
@@ -63,6 +66,7 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> 
 
     # Return that unloading was successful.
     return unload_ok
+
 
 # Enables users to delete a device
 async def async_remove_config_entry_device(
@@ -77,6 +81,7 @@ async def async_remove_config_entry_device(
             title="Device removal",
         )
         return True
+    return False
 
 
 class APIManager:
@@ -90,20 +95,21 @@ class APIManager:
         self.hass = hass
         self.config_entry = config_entry
         # Add listener for midnight reset.
-        self.midnight_tracker_unregister = async_track_utc_time_change(hass, self.midnight_reset, "0", "0", "0", local=True)
+        self.midnight_tracker_unregister = async_track_utc_time_change(
+            hass, self.midnight_reset, "0", "0", "0", local=True
+        )
         # Add listener for 0 or None if no update.
         self.no_update_timer_unregister = None
 
     async def midnight_reset(self, *args):
-        _LOGGER.debug("midnight reset")
-        attribute_values = {}
         """Send dispatcher message to all listeners to reset."""
+        _LOGGER.debug("midnight reset")
+
+        attribute_values = {}
         attribute_values[ATTR_TIMESTAMP] = as_local(datetime.now())
         self._request_sensor_to_update(
             f"{DOMAIN}_midnight_reset",
-            SensorData(
-                data=0, attributes=attribute_values
-            ),
+            SensorData(data=0, attributes=attribute_values),
         )
 
     async def setup_socket_servers(self) -> None:
@@ -122,6 +128,10 @@ class APIManager:
             await socket_server.stop()
         self.socket_servers.clear()
 
+        await self.midnight_tracker_unregister()
+        if self.no_update_timer_unregister is not None:
+            self.no_update_timer_unregister()
+
     def get_device(self, identifiers):
         """Get device from device registry."""
         device_registry = dr.async_get(self.hass)
@@ -135,7 +145,7 @@ class APIManager:
             _LOGGER.warning("No update timer")
             self.no_update_timer_unregister()
             self.no_update_timer_unregister = None
-        
+
         ecu_id = data.get("ecu-id")
 
         # Check if ECU is registered in devices
@@ -151,6 +161,11 @@ class APIManager:
                 attribute_values = {}
                 if sensor.summation_entity:
                     attribute_values[ATTR_TIMESTAMP] = data.get(ATTR_TIMESTAMP)
+                # Added to support no update value changes
+                if sensor.value_if_no_update != -1:
+                    attribute_values[ATTR_VALUE_IF_NO_UPDATE] = (
+                        sensor.value_if_no_update
+                    )
                 self._request_sensor_to_update(
                     f"{DOMAIN}_{ecu_id}_{slugify(sensor.name)}",
                     SensorData(
@@ -174,28 +189,52 @@ class APIManager:
                 _LOGGER.debug("Update for known inverter: %s", inverter.get("uid"))
                 for uid, inverter in data.get(ATTR_INVERTERS).items():
                     for inverter_sensor in INVERTER_SENSORS:
+                        # Added for summation sensors to get initial attribute values
+                        attribute_values = {}
+                        if sensor.summation_entity:
+                            attribute_values[ATTR_TIMESTAMP] = data.get(ATTR_TIMESTAMP)
+                        # Added to support no update value changes
+                        if sensor.value_if_no_update != -1:
+                            attribute_values[ATTR_VALUE_IF_NO_UPDATE] = (
+                                sensor.value_if_no_update
+                            )
                         self._request_sensor_to_update(
                             f"{DOMAIN}_{ecu_id}_{uid}_{slugify(inverter_sensor.name)}",
                             SensorData(
-                                data=inverter.get(inverter_sensor.parameter)
+                                data=inverter.get(inverter_sensor.parameter),
+                                attributes=attribute_values,
                             ),
                         )
 
                     for channel in range(inverter.get("channel_qty", 0)):
                         for inverter_channel_sensor in INVERTER_CHANNEL_SENSORS:
                             try:
+                                # Added for summation sensors to get initial attribute values
+                                attribute_values = {}
+                                if sensor.summation_entity:
+                                    attribute_values[ATTR_TIMESTAMP] = data.get(
+                                        ATTR_TIMESTAMP
+                                    )
+                                # Added to support no update value changes
+                                if sensor.value_if_no_update != -1:
+                                    attribute_values[ATTR_VALUE_IF_NO_UPDATE] = (
+                                        sensor.value_if_no_update
+                                    )
                                 self._request_sensor_to_update(
                                     f"{DOMAIN}_{ecu_id}_{uid}_{slugify(inverter_channel_sensor.name)}_{channel + 1}",
                                     SensorData(
                                         data=inverter.get(
                                             inverter_channel_sensor.parameter
-                                        )[channel]
+                                        )[channel],
+                                        attributes=attribute_values,
                                     ),
                                 )
                             except (ValueError, IndexError):
                                 _LOGGER.warning("There was a value or index error")
                                 continue
-        #self.no_update_timer_unregister = async_call_later(self.hass, timedelta(seconds = 120), self.fire_no_update) #360
+        self.no_update_timer_unregister = async_call_later(
+            self.hass, timedelta(seconds=NO_UPDATE_TIMEOUT), self.fire_no_update
+        )  # 360
 
     def _request_sensor_to_update(self, channel_id: str, data: Any):
         """Send a dispatch message to update sensor."""
@@ -208,6 +247,7 @@ class APIManager:
 
     async def fire_no_update(self, *args):
         """Update no_update sensors."""
+        _LOGGER.debug("Firing no update")
         async_dispatcher_send(
             self.hass,
             f"{DOMAIN}_no_update",
