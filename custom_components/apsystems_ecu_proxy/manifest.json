@@ -4,6 +4,7 @@
     "codeowners": [
         "@haedwin"
     ],
+    "after_dependencies": ["network"],
     "dependencies": [],
     "config_flow": true,
     "documentation": "https://github.com/HAEdwin/homeassistant-apsystems_ecu_proxy",
