@@ -1,20 +1,18 @@
 {
     "domain": "apsystems_ecu_proxy",
     "name": "APsystems ECU Proxy",
-    "codeowners": [
-        "@haedwin"
-    ],
     "after_dependencies": ["network"],
-    "dependencies": [],
+    "codeowners": ["@haedwin"],
     "config_flow": true,
+    "dependencies": [],
     "documentation": "https://github.com/HAEdwin/homeassistant-apsystems_ecu_proxy",
+    "integration_type": "hub",
+    "iot_class": "local_push",
     "issue_tracker": "https://github.com/haedwin/homeassistant-apsystems_ecu_proxy/issues",
     "loggers": [
         "custom_components.apsystems_ecu_proxy"
     ],
     "requirements": [],
-    "integration_type": "hub",
-    "iot_class": "local_push",
     "single_config_entry": true,
     "version": "v0.2.3"
 }
