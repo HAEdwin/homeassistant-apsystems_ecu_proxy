@@ -194,9 +194,9 @@ class APIManager:
                         if sensor.summation_entity:
                             attribute_values[ATTR_TIMESTAMP] = data.get(ATTR_TIMESTAMP)
                         # Added to support no update value changes
-                        if sensor.value_if_no_update != -1:
+                        if inverter_sensor.value_if_no_update != -1:
                             attribute_values[ATTR_VALUE_IF_NO_UPDATE] = (
-                                sensor.value_if_no_update
+                                inverter_sensor.value_if_no_update
                             )
                         self._request_sensor_to_update(
                             f"{DOMAIN}_{ecu_id}_{uid}_{slugify(inverter_sensor.name)}",
@@ -211,14 +211,14 @@ class APIManager:
                             try:
                                 # Added for summation sensors to get initial attribute values
                                 attribute_values = {}
-                                if sensor.summation_entity:
+                                if inverter_channel_sensor.summation_entity:
                                     attribute_values[ATTR_TIMESTAMP] = data.get(
                                         ATTR_TIMESTAMP
                                     )
                                 # Added to support no update value changes
-                                if sensor.value_if_no_update != -1:
+                                if inverter_channel_sensor.value_if_no_update != -1:
                                     attribute_values[ATTR_VALUE_IF_NO_UPDATE] = (
-                                        sensor.value_if_no_update
+                                        inverter_channel_sensor.value_if_no_update
                                     )
                                 self._request_sensor_to_update(
                                     f"{DOMAIN}_{ecu_id}_{uid}_{slugify(inverter_channel_sensor.name)}_{channel + 1}",

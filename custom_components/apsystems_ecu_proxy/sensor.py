@@ -482,6 +482,9 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
 
     async def set_no_update_value(self):
         """Set no update value."""
+        _LOGGER.debug(
+            "Setting no update value of %s on %s", self.no_update_value, self.name
+        )
         self._attr_native_value = self.no_update_value
         self.async_write_ha_state()
 
@@ -595,11 +598,12 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
                 self.update_attributes({ATTR_TIMESTAMP: current_timestamp})
 
         # Update value if no update attribute to allow changes to definition to take effect
-        if update_data.attributes.get(ATTR_VALUE_IF_NO_UPDATE):
+        if update_data.attributes.get(ATTR_VALUE_IF_NO_UPDATE, -1) != -1:
             self.update_attributes(
                 {
-                    ATTR_VALUE_IF_NO_UPDATE,
-                    update_data.attributes.get(ATTR_VALUE_IF_NO_UPDATE),
+                    ATTR_VALUE_IF_NO_UPDATE: update_data.attributes.get(
+                        ATTR_VALUE_IF_NO_UPDATE
+                    ),
                 }
             )
 
@@ -619,9 +623,10 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
             update_value = add_local_timezone(self.hass, update_value)
 
         _LOGGER.debug(
-            "Updating sensor: %s with value %s",
+            "Updating sensor: %s with value %s and attributes %s",
             self.entity_id,
             update_value,
+            update_data.attributes,
         )
         self._attr_native_value = update_value
         self.async_write_ha_state()
