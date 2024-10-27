@@ -30,7 +30,7 @@ PLATFORMS = ["sensor"]
 
 
 class APsystemsECUProxyInvalidData(Exception):
-    """Class provides passforward for error massages."""
+    """Class provides passforward for error messages."""
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry):
@@ -142,7 +142,7 @@ class APIManager:
 
         # Cancel no update timer as have update.
         if self.no_update_timer_unregister:
-            _LOGGER.warning("No update timer")
+            _LOGGER.debug("Cancel 'No update' timer")
             self.no_update_timer_unregister()
             self.no_update_timer_unregister = None
 
@@ -234,7 +234,7 @@ class APIManager:
                                 continue
         self.no_update_timer_unregister = async_call_later(
             self.hass, timedelta(seconds=NO_UPDATE_TIMEOUT), self.fire_no_update
-        )  # 360
+        )
 
     def _request_sensor_to_update(self, channel_id: str, data: Any):
         """Send a dispatch message to update sensor."""
