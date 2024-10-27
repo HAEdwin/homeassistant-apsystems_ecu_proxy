@@ -81,6 +81,7 @@ class MySocketAPI:
         if self.server:
             self.server.close()
             await self.server.wait_closed()
+            self.server = None
             _LOGGER.debug("Server for port %s stopped", self.port)
 
     async def data_received(
