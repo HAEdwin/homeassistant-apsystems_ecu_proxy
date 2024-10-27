@@ -192,7 +192,7 @@ INVERTER_SENSORS: tuple[APSystemSensorDefinition, ...] = (
         device_class=SensorDeviceClass.TEMPERATURE,
         unit_of_measurement=UnitOfTemperature.CELSIUS,
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_if_no_update=0,
+        value_if_no_update=None,
     ),
     APSystemSensorDefinition(
         name="Frequency",
