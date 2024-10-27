@@ -114,7 +114,7 @@ class MySocketAPI:
                     response = await self.send_data_to_ema(self.port, data)
                     await self.send_data_to_ecu(writer, response)
 
-                # MessageFilter: whitelist data message and message checksum
+                # MessageFilter: whitelist data message and message checksum.
                 if (
                     not message.startswith("APS18AA")
                     or int(message[7:10]) != len(message) - 1
@@ -129,13 +129,7 @@ class MySocketAPI:
                     )
                     return None
 
-                _LOGGER.debug(
-                    "Processing message from ECU @ %s on port %s - %s",
-                    addr[0],
-                    self.port,
-                    message.replace("\n", ""),
-                )
-                # Get & interpret ECU data
+                # Get & interpret ECU data.
                 ecu["ecu-id"] = message[18:30]
                 ecu["model"] = self.get_model(message[18:22])
                 ecu["lifetime_energy"] = int(message[42:60]) / 10
@@ -144,31 +138,26 @@ class MySocketAPI:
                 ecu["inverters"] = self.get_inverters(ecu["ecu-id"], message)
                 ecu["timestamp"] = datetime.strptime(message[60:74], "%Y%m%d%H%M%S")
 
-                # When 5 minute update interval expires, stop graphs
+                # MessageFilter: Ignore old messages.
                 if (
                     message_age := (datetime.now() - ecu["timestamp"]).total_seconds()
                 ) > MESSAGE_IGNORE_AGE:
-                    _LOGGER.debug(
-                        "Message told old with %s sec, stopping graphs",
+                    _LOGGER.warning(
+                        "Message told old with %s sec.",
                         int(message_age),
                     )
-                    ecu["timestamp"] = datetime.now().replace(microsecond=0)
-                    ecu["current_power"] = 0
-                    ecu["qty_of_online_inverters"] = 0
-                    # Iterate through each inverter and update the values
-                    for inverter in ecu["inverters"].values():
-                        inverter["frequency"] = 0
-                        inverter["power"] = [0] * len(inverter["power"])
-                        inverter["voltage"] = [0] * len(inverter["voltage"])
-                        inverter["current"] = [0] * len(inverter["current"])
-                        inverter["temperature"] = None
-                        inverter["frequency"] = 0.0
+                    return None
+
+                _LOGGER.warning(
+                    "Processing message from ECU @ %s on port %s - %s",
+                    addr[0],
+                    self.port,
+                    message.replace("\n", ""),
+                )
+
                 self.callback(ecu)
             except ConnectionResetError:
                 _LOGGER.warning("Error: Connection was reset")
-            # except Exception as error:
-            #    _LOGGER.warning("Exception error with %s", error)
-            # alternative
             except Exception:  # noqa: BLE001
                 _LOGGER.warning("Exception error with %s", traceback.format_exc())
 
