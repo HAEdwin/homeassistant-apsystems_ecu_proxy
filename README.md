@@ -1,7 +1,5 @@
 ![Home Assistant Dashboard](https://github.com/HAEdwin/homeassistant-apsystems_ecu_proxy/blob/main/impression.jpg)
 # APsystems ECU Proxy
-
-### &#x1F534; This integration is under construction
 Works and tested with the ECU-R (2160....) if the integration works for your ECU model, please let me know which model you own!
 The integration is not compatible with the ECU-C https://github.com/HAEdwin/homeassistant-apsystems_ecu_proxy/issues/2.
 
