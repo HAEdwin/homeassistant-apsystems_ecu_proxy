@@ -1,5 +1,5 @@
 {
   "name": "APsystems ECU Proxy",
-  "render_readme": true,
+  "render_readme": False,
   "homeassistant": "2024.1.0"
 }
