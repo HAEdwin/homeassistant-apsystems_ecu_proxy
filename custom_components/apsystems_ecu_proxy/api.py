@@ -80,7 +80,6 @@ class MySocketAPI:
         self.serve = False
         if self.server:
             self.server.close()
-            await self.server.wait_closed()
             self.server = None
             _LOGGER.debug("Server for port %s stopped", self.port)
 
@@ -143,13 +142,13 @@ class MySocketAPI:
                 if (
                     message_age := (datetime.now() - ecu["timestamp"]).total_seconds()
                 ) > MESSAGE_IGNORE_AGE:
-                    _LOGGER.warning(
+                    _LOGGER.debug(
                         "Message told old with %s sec.",
                         int(message_age),
                     )
                     return None
 
-                _LOGGER.warning(
+                _LOGGER.debug(
                     "Processing message from ECU @ %s on port %s - %s",
                     addr[0],
                     self.port,
