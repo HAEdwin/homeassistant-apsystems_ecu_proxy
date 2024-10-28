@@ -1,3 +1,4 @@
+[![Validate with hassfest](https://github.com/HAEdwin/homeassistant-apsystems_ecu_proxy/actions/workflows/hassfest.yaml/badge.svg)](https://github.com/HAEdwin/homeassistant-apsystems_ecu_proxy/actions/workflows/hassfest.yaml)
 ![Home Assistant Dashboard](https://github.com/HAEdwin/homeassistant-apsystems_ecu_proxy/blob/main/impression.jpg)
 # APsystems ECU Proxy
 Works and tested with the ECU-R (2160....) if the integration works for your ECU model, please let me know which model you own!
