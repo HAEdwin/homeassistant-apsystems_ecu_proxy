@@ -5,7 +5,7 @@ from enum import StrEnum
 DOMAIN = "apsystems_ecu_proxy"
 
 # Max age of message (in seconds) to process
-MESSAGE_IGNORE_AGE = 600
+MESSAGE_IGNORE_AGE = 1800
 
 # Max summation stub time to add for new period - see code in summation_calculation method in
 # sensor.py.  Added if no messages recieved for sometime due to inverter shutdown.
