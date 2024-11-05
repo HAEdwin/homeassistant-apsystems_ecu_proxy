@@ -1,19 +1,30 @@
 {
-    "config": {
-        "step": {
-            "user": {
-                "data": {
-                    "host": "Proxy IP address (without leading zero)"
-                },
-                "title": "APsystems ECU Proxy Options"
-            }
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "ema_host": "EMA Host (3.67.1.32)",
+          "message_ignore_age": "Message Ignore Age (seconds)",
+          "max_stub_interval": "Max Stub Interval (seconds)",
+          "no_update_timeout": "No Update Timeout (seconds)",
+          "send_to_ema": "Send to EMA"
         },
-        "error": {
-            "cannot_connect": "Can't start proxy at this IP-Address",
-            "unknown": "Unknown error, see log for details"
-        },
-        "abort": {
-            "already_configured": "Only single instance configuration possible"
-        }
+        "title": "Configuration"
+      }
     }
+  },
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "ema_host": "EMA Host (3.67.1.32)",
+          "message_ignore_age": "Message Ignore Age (seconds)",
+          "max_stub_interval": "Max Stub Interval (seconds)",
+          "no_update_timeout": "No Update Timeout (seconds)",
+          "send_to_ema": "Send to EMA"
+        },
+        "title": "Configuration"
+      }
+    }
+  }
 }
