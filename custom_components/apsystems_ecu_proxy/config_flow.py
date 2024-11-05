@@ -4,7 +4,7 @@ import asyncio
 from homeassistant import config_entries, exceptions
 from homeassistant.core import callback
 
-from .const import DOMAIN
+from .const import DOMAIN, KEYS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -25,11 +25,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """First step: Initial set-up of integration options."""
         _LOGGER.debug("async_step_user")
         schema = vol.Schema({
-            vol.Required("ema_host", default="3.67.1.32"): str,
-            vol.Required("message_ignore_age", default="1800"): str,
-            vol.Required("max_stub_interval", default="300"): str,
-            vol.Required("no_update_timeout", default="600"): str,
-            vol.Required("send_to_ema", default=True): bool,
+            vol.Required(KEYS[0], default="3.67.1.32"): str,
+            vol.Required(KEYS[1], default="1800"): str,
+            vol.Required(KEYS[2], default="300"): str,
+            vol.Required(KEYS[3], default="600"): str,
+            vol.Required(KEYS[4], default=True): bool,
         })
 
         if user_input is not None:
@@ -58,16 +58,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         )
         _LOGGER.debug("async_step_init with options: %s", current_options)
         
-        keys = [
-            "ema_host", 
-            "message_ignore_age", 
-            "max_stub_interval", 
-            "no_update_timeout", 
-            "send_to_ema"
-        ]
         schema = vol.Schema({
             vol.Required(key, default=current_options.get(key)): str if key != "send_to_ema" else bool 
-            for key in keys
+            for key in KEYS
         })
 
         if user_input is not None:
