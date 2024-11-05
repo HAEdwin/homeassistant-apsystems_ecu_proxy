@@ -9,7 +9,7 @@
           "no_update_timeout": "No Update Timeout (seconds)%",
           "send_to_ema": "Send to EMA%"
         },
-        "title": "APsystems ECU Config%"
+        "title": "Configuration"
       }
     },
     "error": {
@@ -31,7 +31,7 @@
           "no_update_timeout": "No Update Timeout (seconds)#",
           "send_to_ema": "Send to EMA#"
         },
-        "title": "APsystems ECU Options#"
+        "title": "Configuration"
       }
     },
     "error": {
