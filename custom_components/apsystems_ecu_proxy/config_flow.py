@@ -67,8 +67,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
 
         if user_input is not None:
-            ema_host = user_input["ema_host"]
-            if await self.validate_ip(ema_host):
+            if await self.validate_ip(user_input["ema_host"]):
                 updated_options = current_options.copy()
                 updated_options.update(user_input)
                 return self.async_create_entry(title="", data=updated_options)
