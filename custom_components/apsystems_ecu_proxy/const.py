@@ -23,20 +23,17 @@ RESTART_ICON = "mdi:restart"
 DCVOLTAGE_ICON = "mdi:current-dc"
 POWER_ICON = "mdi:power"
 
-# Constants for data
+# Datacom handling
 SOCKET_PORTS = [8995, 8996, 8997]
 EMA_HOST = "3.67.1.32"
 # Max age of message (in seconds) to process
 MESSAGE_IGNORE_AGE = 1800
 # Max summation stub time to add for new period - see code in summation_calculation method in
-# sensor.py.  Added if no messages recieved for sometime due to inverter shutdown.
 MAX_STUB_INTERVAL = 300
-# Timeout to set value of no_update_value to sensors if no update received
-NO_UPDATE_TIMEOUT = 600
 # Used to prevent sending data to EMA for testing purposes.  Set to false during testing.
 SEND_TO_EMA = True
 
-#Constants for config flow
+# Config flow schema. These are also translated through associated json translations
 KEYS = [
             "ema_host", 
             "message_ignore_age", 

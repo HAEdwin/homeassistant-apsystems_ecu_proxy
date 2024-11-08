@@ -4,9 +4,9 @@
       "init": {
         "data": {
           "ema_host": "EMA Host (3.67.1.32)",
-          "message_ignore_age": "Message Ignore Age (seconds)",
-          "max_stub_interval": "Max Stub Interval (seconds)",
-          "no_update_timeout": "No Update Timeout (seconds)",
+          "message_ignore_age": "Message Ignore Age e.g. 1800 (seconds)",
+          "max_stub_interval": "Max Stub Interval e.g. 300 (seconds)",
+          "no_update_timeout": "No Update Timeout e.g. 600 (seconds)",
           "send_to_ema": "Send to EMA"
         },
         "title": "Configuration"
@@ -18,9 +18,9 @@
       "user": {
         "data": {
           "ema_host": "EMA Host (3.67.1.32)",
-          "message_ignore_age": "Message Ignore Age (seconds)",
-          "max_stub_interval": "Max Stub Interval (seconds)",
-          "no_update_timeout": "No Update Timeout (seconds)",
+          "message_ignore_age": "Message Ignore Age e.g. 1800 (seconds)",
+          "max_stub_interval": "Max Stub Interval e.g. 300 (seconds)",
+          "no_update_timeout": "No Update Timeout e.g. 600 (seconds) ",
           "send_to_ema": "Send to EMA"
         },
         "title": "Configuration"
