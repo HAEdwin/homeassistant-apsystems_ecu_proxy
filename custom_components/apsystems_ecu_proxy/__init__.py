@@ -36,7 +36,6 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry):
     """Get server params and start Proxy."""
 
     hass.data.setdefault(DOMAIN, {})
-    config_entry.async_on_unload(config_entry.add_update_listener(update_listener))
 
     api_handler = APIManager(hass, config_entry)
     await api_handler.setup_socket_servers()
@@ -68,18 +67,6 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> 
     return unload_ok
 
 
-async def update_listener(hass: HomeAssistant, config_entry: ConfigEntry):
-    """Handle options update being triggered by config entry options updates."""
-    _LOGGER.debug("Configuration updated: %s", config_entry.options)
-
-    # Fetch the new 'no_update_timeout' value from the config entry options.
-    no_update_timeout = int(config_entry.options.get('no_update_timeout'))
-
-    # Update the APIManager instance with the new value for 'no_update_timeout'.
-    api_handler: APIManager = hass.data[DOMAIN][config_entry.entry_id]["api_handler"]
-    api_handler.update_no_update_timeout(no_update_timeout)
-
-
 async def async_remove_config_entry_device(
     hass: HomeAssistant, config_entry: ConfigEntry, device_entry: dr.DeviceEntry
 ) -> bool:
@@ -104,14 +91,8 @@ class APIManager:
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         """Initialize coordinator."""
         self.hass = hass
-        #self.config_entry = config_entry
+        self.config_entry = config_entry
         
-        # Get configuration. If initial data else options.
-        self.no_update_timeout = int(
-            config_entry.options.get('no_update_timeout', 
-            config_entry.data.get('no_update_timeout'))
-        )
-
         # Add listener for midnight reset.
         self.midnight_tracker_unregister = async_track_utc_time_change(
             hass, self.midnight_reset, "0", "0", "0", local=True
@@ -119,10 +100,6 @@ class APIManager:
         # Add listener for 0 or None if no update.
         self.no_update_timer_unregister = None
 
-    def update_no_update_timeout(self, new_timeout: int):
-        """Update the no_update_timeout value."""
-        _LOGGER.debug("Updating no_update_timeout to %d", new_timeout)
-        self.no_update_timeout = new_timeout
 
     async def midnight_reset(self, *args):
         """Send dispatcher message to all listeners to reset."""
@@ -255,6 +232,13 @@ class APIManager:
                             except (ValueError, IndexError):
                                 _LOGGER.warning("There was a value or index error")
                                 continue
+
+        
+        # Get configuration. If initial data else options.
+        self.no_update_timeout = int(
+            self.config_entry.options.get('no_update_timeout', 
+            self.config_entry.data.get('no_update_timeout'))
+        )
 
         # Start the no update timer with the updated value.
         self.no_update_timer_unregister = async_call_later(
