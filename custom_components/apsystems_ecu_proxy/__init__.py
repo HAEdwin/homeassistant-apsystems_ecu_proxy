@@ -118,7 +118,7 @@ class APIManager:
 
         for port in SOCKET_PORTS:
             _LOGGER.debug("Creating server for port %s", port)
-            server = MySocketAPI(host, port, self.async_update_callback)
+            server = MySocketAPI(host, port, self.async_update_callback, self.config_entry)
             await server.start()
             self.socket_servers.append(server)
 
