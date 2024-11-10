@@ -25,13 +25,8 @@ POWER_ICON = "mdi:power"
 
 # Datacom handling
 SOCKET_PORTS = [8995, 8996, 8997]
-EMA_HOST = "3.67.1.32"
-# Max age of message (in seconds) to process
-MESSAGE_IGNORE_AGE = 1800
 # Max summation stub time to add for new period - see code in summation_calculation method in
 MAX_STUB_INTERVAL = 300
-# Used to prevent sending data to EMA for testing purposes.  Set to false during testing.
-SEND_TO_EMA = True
 
 # Config flow schema. These are also translated through associated json translations
 KEYS = [
