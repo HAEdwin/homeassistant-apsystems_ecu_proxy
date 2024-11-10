@@ -92,14 +92,17 @@ class APIManager:
         """Initialize coordinator."""
         self.hass = hass
         self.config_entry = config_entry
-        
+
         # Add listener for midnight reset.
         self.midnight_tracker_unregister = async_track_utc_time_change(
             hass, self.midnight_reset, "0", "0", "0", local=True
         )
+
+        # Get configuration. If initial data else options.
+        self.no_update_timeout = int(self.config_entry.data.get("no_update_timeout"))
+
         # Add listener for 0 or None if no update.
         self.no_update_timer_unregister = None
-
 
     async def midnight_reset(self, *args):
         """Send dispatcher message to all listeners to reset."""
@@ -118,7 +121,9 @@ class APIManager:
 
         for port in SOCKET_PORTS:
             _LOGGER.debug("Creating server for port %s", port)
-            server = MySocketAPI(host, port, self.async_update_callback, self.config_entry)
+            server = MySocketAPI(
+                host, port, self.async_update_callback, self.config_entry
+            )
             await server.start()
             self.socket_servers.append(server)
 
@@ -232,13 +237,6 @@ class APIManager:
                             except (ValueError, IndexError):
                                 _LOGGER.warning("There was a value or index error")
                                 continue
-
-        
-        # Get configuration. If initial data else options.
-        self.no_update_timeout = int(
-            self.config_entry.options.get('no_update_timeout', 
-            self.config_entry.data.get('no_update_timeout'))
-        )
 
         # Start the no update timer with the updated value.
         self.no_update_timer_unregister = async_call_later(

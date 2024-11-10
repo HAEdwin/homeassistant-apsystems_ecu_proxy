@@ -6,9 +6,9 @@ from datetime import datetime
 import logging
 import re
 import traceback
-from homeassistant.config_entries import ConfigEntry
 from typing import Any
 
+from homeassistant.config_entries import ConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -55,7 +55,9 @@ INVERTER_MODELS = [
 class MySocketAPI:
     """API class."""
 
-    def __init__(self, host: str, port: int, callback: Callable, config_entry: ConfigEntry) -> None:
+    def __init__(
+        self, host: str, port: int, callback: Callable, config_entry: ConfigEntry
+    ) -> None:
         """Initialize API."""
         self.host = host
         self.port = port
@@ -65,9 +67,13 @@ class MySocketAPI:
         self.ecu_mem = {}
         self.config_entry = config_entry
 
+        self.send_to_ema = self.get_config_value("send_to_ema", bool)
+        self.message_ignore_age = self.get_config_value("message_ignore_age", int)
+        self.ema_host = self.get_config_value("ema_host", str)
 
     def get_config_value(self, key, default_type):
-        return default_type(self.config_entry.options.get(key, self.config_entry.data.get(key)))
+        """Get config value."""
+        return default_type(self.config_entry.data.get(key))
 
     async def start(self) -> bool:
         """Start listening socket server."""
@@ -116,7 +122,6 @@ class MySocketAPI:
                 # Send data to EMA and send response from EMA to ECU
                 # send_to_ema is used to stop sending for testing purposes.
                 # Get configuration. If initial data else options.
-                self.send_to_ema = self.get_config_value('send_to_ema', bool)
                 _LOGGER.debug("Send to EMA = %s", self.send_to_ema)
                 if self.send_to_ema:
                     response = await self.send_data_to_ema(self.port, data)
@@ -147,13 +152,12 @@ class MySocketAPI:
                 ecu["timestamp"] = datetime.strptime(message[60:74], "%Y%m%d%H%M%S")
 
                 # MessageFilter: Ignore old messages.
-                self.message_ignore_age = self.get_config_value('message_ignore_age', int)
                 _LOGGER.debug("Message ignore age = %s", self.message_ignore_age)
                 if (
                     message_age := (datetime.now() - ecu["timestamp"]).total_seconds()
                 ) > self.message_ignore_age:
                     _LOGGER.debug(
-                        "Message told old with %s sec.",
+                        "Message told old with %s sec",
                         int(message_age),
                     )
                     return None
@@ -220,9 +224,9 @@ class MySocketAPI:
         return inverters
 
     async def send_data_to_ema(self, port: int, data: bytes) -> bytes:
-        self.ema_host = self.get_config_value('ema_host', str)
-        _LOGGER.debug("EMA host = %s", self.ema_host)
         """Send data over async socket."""
+        _LOGGER.debug("EMA host = %s", self.ema_host)
+
         reader, writer = await asyncio.open_connection(self.ema_host, port)
         writer.write(data)
         await writer.drain()
