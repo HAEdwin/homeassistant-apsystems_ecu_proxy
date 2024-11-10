@@ -14,7 +14,6 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-
 from homeassistant.const import (
     ATTR_UNIT_OF_MEASUREMENT,
     UnitOfElectricCurrent,
@@ -31,7 +30,6 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
-
 
 from .const import (
     ATTR_SUMMATION_FACTOR,
@@ -323,7 +321,7 @@ async def async_setup_entry(
                     data=data.get(sensor.parameter), attributes=initial_attribute_values
                 ),
             )
-            sensors.append(APSystemsSensor(sensor, config))
+            sensors.append(APSystemsSensor(sensor, config, config_entry))
         add_entities(sensors)
 
     @callback
@@ -367,7 +365,7 @@ async def async_setup_entry(
                     data=data.get(sensor.parameter), attributes=initial_attribute_values
                 ),
             )
-            sensors.append(APSystemsSensor(sensor, config))
+            sensors.append(APSystemsSensor(sensor, config, config_entry))
 
         # Add Inverter channel sensors
         for channel in range(data.get("channel_qty", 0)):
@@ -388,7 +386,7 @@ async def async_setup_entry(
                     ),
                     name=f"{sensor.name} Ch {channel + 1}",
                 )
-                sensors.append(APSystemsSensor(sensor, config))
+                sensors.append(APSystemsSensor(sensor, config, config_entry))
 
         add_entities(sensors)
 
@@ -419,10 +417,10 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
     _attr_extra_state_attributes = {}
 
     def __init__(
-        self, 
-        definition: APSystemSensorDefinition, 
+        self,
+        definition: APSystemSensorDefinition,
         config: APSystemSensorConfig,
-        config_entry: ConfigEntry  # Accept ConfigEntry to get dynamic config values
+        config_entry: ConfigEntry,  # Accept ConfigEntry to get dynamic config values
     ) -> None:
         """Initialise sensor."""
         self._definition = definition
@@ -436,6 +434,8 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
         self._attr_native_unit_of_measurement = definition.unit_of_measurement
         self._attr_state_class = definition.state_class
         self._attr_unique_id = self._config.unique_id
+
+        self.max_stub_interval = int(self.config_entry.data.get("max_stub_interval"))
 
     @property
     def is_summation_sensor(self) -> bool:
@@ -646,8 +646,8 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
         current_value: float,
         value: float,
     ) -> int | float:
-
         """Return summation value of value over time.
+
         If change in period, calculates a value over time from start of new period with
         max of MAX_STUB_INTERVAL.
         If no change in period, assumes value persisted since last timestamp.
@@ -669,12 +669,9 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
 
         sum_value = None
         has_changed = False
-        
+
         # Get configuration. If initial data else options.
-        self.max_stub_interval = int(
-            self.config_entry.options.get('max_stub_interval', 
-            self.config_entry.data.get('max_stub_interval'))
-        )
+
         _LOGGER.debug("Max stub interval = %s", self.max_stub_interval)
 
         # Has it crossed calculation period boundry?
