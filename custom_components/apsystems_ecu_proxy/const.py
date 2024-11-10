@@ -28,12 +28,12 @@ SOCKET_PORTS = [8995, 8996, 8997]
 
 # Config flow schema. These are also translated through associated json translations
 KEYS = [
-            "ema_host", 
-            "message_ignore_age", 
-            "max_stub_interval", 
-            "no_update_timeout", 
-            "send_to_ema"
-        ]
+    "ema_host",
+    "message_ignore_age",
+    "max_stub_interval",
+    "no_update_timeout",
+    "send_to_ema",
+]
 
 
 class SummationPeriod(StrEnum):
