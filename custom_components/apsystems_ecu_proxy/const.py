@@ -25,8 +25,6 @@ POWER_ICON = "mdi:power"
 
 # Datacom handling
 SOCKET_PORTS = [8995, 8996, 8997]
-# Max summation stub time to add for new period - see code in summation_calculation method in
-MAX_STUB_INTERVAL = 300
 
 # Config flow schema. These are also translated through associated json translations
 KEYS = [

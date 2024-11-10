@@ -28,7 +28,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             vol.Required(KEYS[0], default="3.67.1.32"): str,
             vol.Required(KEYS[1], default="1800"): str,
             vol.Required(KEYS[2], default="300"): str,
-            vol.Required(KEYS[3], default="600"): str,
+            vol.Required(KEYS[3], default="660"): str,
             vol.Required(KEYS[4], default=True): bool,
         })
 
