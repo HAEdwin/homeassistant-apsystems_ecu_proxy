@@ -1,55 +1,94 @@
-"""Constants."""
+import logging
+import voluptuous as vol
+import asyncio
+from homeassistant import config_entries, exceptions
+from homeassistant.core import callback
 
-from enum import StrEnum
+from .const import DOMAIN, KEYS
 
-DOMAIN = "apsystems_ecu_proxy"
-
-ATTR_TIMESTAMP = "timestamp"
-ATTR_VALUE_IF_NO_UPDATE = "value_if_no_update"
-ATTR_SUMMATION_PERIOD = "summation_period"
-ATTR_SUMMATION_TYPE = "summation_type"
-ATTR_SUMMATION_FACTOR = "summation_factor"
-ATTR_CURRENT_VALUE = "value"
-ATTR_INVERTERS = "inverters"
+_LOGGER = logging.getLogger(__name__)
 
 
-MESSAGE_EVENT = f"{DOMAIN}_message"
+class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Integration configuration."""
+    VERSION = 1
+    CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_PUSH
 
-SOLAR_ICON = "mdi:solar-power"
-FREQ_ICON = "mdi:sine-wave"
-RELOAD_ICON = "mdi:reload"
-CACHE_ICON = "mdi:cached"
-RESTART_ICON = "mdi:restart"
-DCVOLTAGE_ICON = "mdi:current-dc"
-POWER_ICON = "mdi:power"
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry):
+        """Get stored configuration data to present in async_step_init."""
+        _LOGGER.debug("async_get_options_flow called: %s", config_entry)
+        return OptionsFlowHandler(config_entry)
 
-# Datacom handling
-SOCKET_PORTS = [8995, 8996, 8997]
+    async def async_step_user(self, user_input=None):
+        """First step: Initial set-up of integration options."""
+        _LOGGER.debug("async_step_user")
+        schema = vol.Schema({
+            vol.Required(KEYS[0], default="3.67.1.32"): str,
+            vol.Required(KEYS[1], default="1800"): str,
+            vol.Required(KEYS[2], default="300"): str,
+            vol.Required(KEYS[3], default="600"): str,
+            vol.Required(KEYS[4], default=True): bool,
+        })
 
-# Config flow schema. These are also translated through associated json translations
-KEYS = [
-            "ema_host", 
-            "message_ignore_age", 
-            "max_stub_interval", 
-            "no_update_timeout", 
-            "send_to_ema"
-        ]
-
-
-class SummationPeriod(StrEnum):
-    """Summation period Enum."""
-
-    HOURLY = "hourly"
-    DAILY = "daily"
-    WEEKLY = "weekly"
-    MONTHLY = "monthly"
-    YEARLY = "yearly"
-    LIFETIME = "lifetime"
+        if user_input is not None:
+            if await OptionsFlowHandler.validate_ip(user_input["ema_host"]):
+                return self.async_create_entry(title="APsystems ECU proxy", data=user_input)
+            else:
+                return self.async_show_form(
+                    step_id="user",
+                    data_schema=schema,
+                    errors={"base": "Could not connect to the specified EMA host"},
+                )
+        return self.async_show_form(step_id="user", data_schema=schema)
 
 
-class SummationType(StrEnum):
-    """Summation type Enum."""
+class OptionsFlowHandler(config_entries.OptionsFlow):
+    """Regular change of integration options."""
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        self.config_entry = config_entry
 
-    SUM = "sum"
-    MAX = "max"
-    MIN = "min"
+    async def async_step_init(self, user_input=None):
+        """Second step: Altering the integration options."""
+        current_options = (
+            self.config_entry.data 
+            if not self.config_entry.options 
+            else self.config_entry.options
+        )
+        _LOGGER.debug("async_step_init with configuration: %s", current_options)
+        
+        schema = vol.Schema({
+            vol.Required(key, default=current_options.get(key)): (
+                str if key != "send_to_ema" else bool
+            )
+            for key in KEYS
+        })
+
+
+        if user_input is not None:
+            if await self.validate_ip(user_input["ema_host"]):
+                updated_options = current_options.copy()
+                updated_options.update(user_input)
+                return self.async_create_entry(title="", data=updated_options)
+            else:
+                return self.async_show_form(
+                    step_id="init",
+                    data_schema=schema,
+                    errors={"base": "Could not connect to the specified EMA host"},
+                )
+        return self.async_show_form(step_id="init", data_schema=schema)
+
+    @staticmethod
+    async def validate_ip(ip_address: str) -> bool:
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(ip_address, 8995),
+                timeout=3.0
+            )
+            # Close the connection neatly
+            writer.close()
+            await writer.wait_closed()
+            return True
+        except (OSError, asyncio.TimeoutError):
+            return False
