@@ -14,6 +14,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
+
 from homeassistant.const import (
     ATTR_UNIT_OF_MEASUREMENT,
     UnitOfElectricCurrent,
@@ -31,6 +32,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
+
 from .const import (
     ATTR_SUMMATION_FACTOR,
     ATTR_SUMMATION_PERIOD,
@@ -38,7 +40,6 @@ from .const import (
     ATTR_TIMESTAMP,
     ATTR_VALUE_IF_NO_UPDATE,
     DOMAIN,
-    MAX_STUB_INTERVAL,
     SOLAR_ICON,
     SummationPeriod,
     SummationType,
@@ -276,7 +277,7 @@ async def async_setup_entry(
                     ),
                 )
 
-                sensors.append(APSystemsSensor(definition, config))
+                sensors.append(APSystemsSensor(definition, config, config_entry))
 
         if sensors:
             add_entities(sensors)
@@ -418,11 +419,15 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
     _attr_extra_state_attributes = {}
 
     def __init__(
-        self, definition: APSystemSensorDefinition, config: APSystemSensorConfig
+        self, 
+        definition: APSystemSensorDefinition, 
+        config: APSystemSensorConfig,
+        config_entry: ConfigEntry  # Accept ConfigEntry to get dynamic config values
     ) -> None:
         """Initialise sensor."""
         self._definition = definition
         self._config = config
+        self.config_entry = config_entry
 
         self._attr_device_class = definition.device_class
         self._attr_device_info = DeviceInfo(identifiers=self._config.device_identifier)
@@ -641,12 +646,13 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
         current_value: float,
         value: float,
     ) -> int | float:
-        """Return summation value of value over time.
 
+        """Return summation value of value over time.
         If change in period, calculates a value over time from start of new period with
         max of MAX_STUB_INTERVAL.
         If no change in period, assumes value persisted since last timestamp.
         """
+
         _LOGGER.debug(
             "Summation values: Period: %s, Timestamp - current: %s, last: %s, Value - sensor: %s, current: %s",
             summation_period,
@@ -663,6 +669,13 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
 
         sum_value = None
         has_changed = False
+        
+        # Get configuration. If initial data else options.
+        self.max_stub_interval = int(
+            self.config_entry.options.get('max_stub_interval', 
+            self.config_entry.data.get('max_stub_interval'))
+        )
+        _LOGGER.debug("Max stub interval = %s", self.max_stub_interval)
 
         # Has it crossed calculation period boundry?
         if has_changed_period(summation_period, last_timestamp, current_timestamp):
@@ -683,7 +696,7 @@ class APSystemsSensor(RestoreSensor, SensorEntity):
                             summation_period, current_timestamp
                         )
                     ).total_seconds(),
-                    MAX_STUB_INTERVAL,
+                    self.max_stub_interval,
                 )
                 sum_value = round(
                     int(value * (new_period_interval / 3600)) / summation_factor, 2
