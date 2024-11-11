@@ -386,7 +386,7 @@ async def async_setup_entry(
                     ),
                     name=f"{sensor.name} Ch {channel + 1}",
                 )
-                sensors.append(APSystemsSensor(sensor, config, config_entry))
+                sensors.append(APSystemsSensor(sensor, config, config_entry, config_entry))
 
         add_entities(sensors)
 
