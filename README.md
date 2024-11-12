@@ -22,7 +22,7 @@ Use PiHole, AdGuard of Unifi (or any other preferred method) to rewrite DNS. For
 Within 6 minutes data should be received by the integration and entities will appear.
 
 ## Available sensors
-- ECU: Power, Number of inverters online, Lifetime Energy, Last update
+- ECU: Current Power, Daily Max Power, Lifetime Max Power, Hourly Energy Production, Daily Energy Production, Lifetime Energy Production, Inverters Online, Lifetime Energy, Last Update
 - Inverters: Temperature, Frequency, Power per channel, Current per channel, Voltage per channel
 - Calculated: Hourly Energy produced, Daily Energy produced, Lifetime Energy produced, Daily Max Power, Lifetime Max Power.
 
