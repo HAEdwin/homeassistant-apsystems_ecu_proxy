@@ -75,6 +75,13 @@ class MySocketAPI:
         """Get config value."""
         return default_type(self.config_entry.data.get(key))
 
+    def update_config(self, new_config_entry: ConfigEntry):
+        """Update configuration values based on a new config entry."""
+        _LOGGER.debug("Updating config for API on port %s", self.port)
+        self.send_to_ema = self.get_config_value("send_to_ema", bool)
+        self.message_ignore_age = self.get_config_value("message_ignore_age", int)
+        self.ema_host = self.get_config_value("ema_host", str)
+
     async def start(self) -> bool:
         """Start listening socket server."""
         try:
@@ -172,8 +179,18 @@ class MySocketAPI:
                 self.callback(ecu)
             except ConnectionResetError:
                 _LOGGER.warning("Error: Connection was reset")
-            except Exception:  # noqa: BLE001
-                _LOGGER.warning("Exception error with %s", traceback.format_exc())
+            except Exception:
+                _LOGGER.warning(
+                    "Exception error with %s where data is: %s",
+                    traceback.format_exc(),
+                    data,
+                )
+            except Exception:
+                _LOGGER.warning(
+                    "Exception error with %s where data is: %s",
+                    traceback.format_exc(),  # Formats the exception traceback
+                    data,  # The data you're working with
+                )
 
     def get_model(self, model_code: str) -> str:
         """Get model from model code."""
