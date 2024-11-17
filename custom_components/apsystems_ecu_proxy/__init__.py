@@ -1,5 +1,3 @@
-"""Initialise Module for ECU Proxy."""
-
 from datetime import datetime, timedelta
 import logging
 from typing import Any
@@ -37,13 +35,46 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry):
 
     hass.data.setdefault(DOMAIN, {})
 
+    # Initialize the API manager
     api_handler = APIManager(hass, config_entry)
     await api_handler.setup_socket_servers()
 
+    # Save the API handler in hass.data for later use
     hass.data[DOMAIN][config_entry.entry_id] = {"api_handler": api_handler}
 
+    # Forward any configured platforms (e.g., sensors)
     await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
+
+    # Add an update listener to listen for config entry changes
+    config_entry.add_update_listener(update_listener)
+
     return True
+
+
+async def update_listener(hass: HomeAssistant, config_entry: ConfigEntry):
+    """Handle configuration entry updates."""
+    _LOGGER.debug("Config entry updated: %s", config_entry.data)
+
+    # Get updated data from the config entry
+    new_timeout = int(config_entry.data.get("no_update_timeout"))
+    # Update the configuration for the relevant API handler(s)
+    api_handler = hass.data[DOMAIN][config_entry.entry_id]["api_handler"]
+
+    if api_handler:
+        if new_timeout != api_handler.no_update_timeout:
+            _LOGGER.debug("no_update_timeout has changed. Updating API manager.")
+            api_handler.no_update_timeout = new_timeout
+
+            # Reset the existing no_update_timer.
+            if api_handler.no_update_timer_unregister:
+                api_handler.no_update_timer_unregister()
+            api_handler.no_update_timer_unregister = async_call_later(
+                hass, timedelta(seconds=new_timeout), api_handler.fire_no_update
+            )
+
+    # Update config values in api module.
+    for socket_server in api_handler.socket_servers:
+        socket_server.update_config(config_entry)
 
 
 async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
@@ -98,7 +129,7 @@ class APIManager:
             hass, self.midnight_reset, "0", "0", "0", local=True
         )
 
-        # Get configuration. If initial data else options.
+        # Get configuration
         self.no_update_timeout = int(self.config_entry.data.get("no_update_timeout"))
 
         # Add listener for 0 or None if no update.
