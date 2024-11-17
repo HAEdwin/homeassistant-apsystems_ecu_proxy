@@ -1,0 +1,30 @@
+{
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "ema_host": "EMA Host (3.67.1.32)",
+          "message_ignore_age": "Alte Nachrichten ignorieren (Standard 1800 Sekunden)",
+          "max_stub_interval": "Maximales Stub-Intervall (Standard 300 Sekunden)",
+          "no_update_timeout": "Zeitüberschreitung beim Zurücksetzen der Werte (Standard 660 Sekunden)",
+          "send_to_ema": "An EMA versenden"
+        },
+        "title": "Konfiguration"
+      }
+    }
+  },
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "ema_host": "EMA Host (3.67.1.32)",
+          "message_ignore_age": "Alte Nachrichten ignorieren (Standard 1800 Sekunden)",
+          "max_stub_interval": "Maximales Stub-Intervall (Standard 300 Sekunden)",
+          "no_update_timeout": "Zeitüberschreitung beim Zurücksetzen der Werte (Standard 660 Sekunden)",
+          "send_to_ema": "An EMA versenden"
+        },
+        "title": "Konfiguration"
+      }
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "ema_host": "EMA Host (3.67.1.32)",
+          "message_ignore_age": "Ignorar mensajes antiguos (predeterminado 1800 segundos)",
+          "max_stub_interval": "Intervalo máximo de código auxiliar (predeterminado 300 segundos)",
+          "no_update_timeout": "Restablecer el tiempo de espera de los valores (predeterminado 660 segundos)",
+          "send_to_ema": "Enviar a EMA"
+        },
+        "title": "Configuración"
+      }
+    }
+  },
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "ema_host": "EMA Host (3.67.1.32)",
+          "message_ignore_age": "Ignorar mensajes antiguos (predeterminado 1800 segundos)",
+          "max_stub_interval": "Intervalo máximo de código auxiliar (predeterminado 300 segundos)",
+          "no_update_timeout": "Restablecer el tiempo de espera de los valores (predeterminado 660 segundos)",
+          "send_to_ema": "Enviar a EMA"
+        },
+        "title": "Configuración"
+      }
+    }
+  }
+}
