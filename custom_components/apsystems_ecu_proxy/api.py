@@ -185,13 +185,7 @@ class MySocketAPI:
                     traceback.format_exc(),
                     data,
                 )
-            except Exception:
-                _LOGGER.warning(
-                    "Exception error with %s where data is: %s",
-                    traceback.format_exc(),  # Formats the exception traceback
-                    data,  # The data you're working with
-                )
-
+    
     def get_model(self, model_code: str) -> str:
         """Get model from model code."""
         if model := ECU_MODELS_216.get(model_code) or ECU_MODELS_215.get(
