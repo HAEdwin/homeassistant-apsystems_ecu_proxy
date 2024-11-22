@@ -38,8 +38,8 @@ The integration will need to be configured in order to fully integrate it in HA 
 
 **2. Integrating the custom integration into Home Assistant**
 - Navigate to [Settings] > [Devices & services] and choose the button [+ ADD INTEGRATION].
-- In Search for a brand name, choose APsystems and the APsystems ECY Proxy will be listed.
-- Select it and the Configuration diaglog will show, defaults are fine right now so choose [SUBMIT].
+- In Search for a brand name, choose APsystems and the APsystems ECU Proxy will be listed.
+- Select it and the Configuration dialog will show, defaults are fine right now so choose [SUBMIT].
 
 **3. Rewrite DNS traffic**
 - Use PiHole, AdGuard of Unifi (or any other preferred method) to rewrite DNS. For example in AdGuard: Navigate to > Filters > DNS Rewrites > Add DNS rewrite > For domain name enter: ecu.apsystemsema.com > for IP-address enter: IP-address where the integration runs.
