@@ -44,6 +44,7 @@ The integration will need to be configured in order to fully integrate it in HA 
 **3. Rewrite DNS traffic**
 - Use PiHole, AdGuard of Unifi (or any other preferred method) to rewrite DNS. For example in AdGuard: Navigate to > Filters > DNS Rewrites > Add DNS rewrite > For domain name enter: ecu.apsystemsema.com > for IP-address enter: IP-address where the integration runs.
 - Within 6 minutes data should be received by the integration and entities will appear. In worst case scenario you will have to wait for 10 minutes before all the devices and entities will show up. After that you can start the fun part of adding the entities to the dashboard.
+- You can verify if the rewrite works by sending a ping to ecu.apsystemsema.com, response should be the previously entered IP-address from your local HA install (or where this integration runs).
 
 ## Available sensors
 - ECU: Current Power, Daily Max Power, Lifetime Max Power, Hourly Energy Production, Daily Energy Production, Lifetime Energy Production, Inverters Online, Lifetime Energy, Last Update
