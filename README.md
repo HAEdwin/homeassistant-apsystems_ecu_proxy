@@ -14,7 +14,7 @@ This custom integration was made possible by the hard work and excellent knowled
 
 ## Prerequisites
 - An APsystems ECU device starting with ECU-ID 2160 (might be compatible with other ECU types except for the ECU-C https://github.com/HAEdwin/homeassistant-apsystems_ecu_proxy/issues/2).
-- PiHole, AdGuard running as add-on installed on Home Assistant or something else like Unifi controller (from version 8.2.93) to rewrite DNS.
+- PiHole, AdGuard running as add-on installed on Home Assistant or something else like Unifi controller (from network version 8.2.93 or higher) to rewrite DNS.
 - Working HACS installation and GitHub account (manual installation is possible).
 
 ## Install the integration
