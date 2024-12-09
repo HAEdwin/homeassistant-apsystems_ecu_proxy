@@ -1,125 +1,105 @@
-""" config_flow.py """
+"""Config flow."""
 
+import asyncio
 import logging
+
 import voluptuous as vol
 
-from homeassistant.core import callback
 from homeassistant import config_entries
+from homeassistant.core import callback
 
 from .const import DOMAIN, KEYS
-from .ecu_api import APsystemsSocket, APsystemsInvalidData
 
 _LOGGER = logging.getLogger(__name__)
 
-STEP_USER_DATA_SCHEMA = vol.Schema({
-    vol.Required(KEYS[0], default= ''): str,
-    vol.Required(KEYS[1], default= 300): int,
-    vol.Optional(KEYS[2], default= 5): int,  # Port retries
-    vol.Optional(KEYS[3], default= "ECU-WIFI_local"): str,
-    vol.Optional(KEYS[4], default= "default"): str,
-    vol.Optional(KEYS[5], default= False): bool,
-})
 
-@config_entries.HANDLERS.register(DOMAIN)
-class FlowHandler(config_entries.ConfigFlow):
+async def validate_ip(ip_address: str) -> bool:
+    """Validate EMA server ip."""
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(ip_address, 8995), timeout=3.0
+        )
+        # Close the connection neatly
+        writer.close()
+        await writer.wait_closed()
+    except (OSError, TimeoutError):
+        return False
+    else:
+        return True
+
+
+class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Integration configuration."""
 
     VERSION = 1
+    CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_PUSH
 
-    async def async_step_user(self, user_input=None):
-        errors = {}
-        if user_input is None:
-            # Show form because user input is empty.
-            return self.async_show_form(
-                step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
-            )
-
-        # User input is not empty, processing input.
-        retries = user_input.get(KEYS[2], 5)  # Get port_retries from user input, default to 5
-        show_graphs = user_input.get(KEYS[5], False) # Get show_graphs from user input, default to False
-        _LOGGER.warning("1. show_graphs = %s", show_graphs)
-        ecu_id = await test_ecu_connection(self.hass, user_input["ecu_host"], retries, show_graphs)
-        _LOGGER.debug("ecu_id = %s", ecu_id)
-
-        if ecu_id:
-            return self.async_create_entry(title=f"ECU: {ecu_id}", data=user_input)
-        else:
-            errors["ecu_host"] = "no_ecu_found"
-            return self.async_show_form(
-                step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
-            )
-
-    # Enable the integration to be reconfigured in the UI
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
-        return OptionsFlowHandler()
+        """Get stored configuration data to present in async_step_init."""
+        _LOGGER.debug("async_get_options_flow called: %s", config_entry)
+        return OptionsFlowHandler(config_entry)
+
+    async def async_step_user(self, user_input=None):
+        """First step: Initial set-up of integration options."""
+        _LOGGER.debug("async_step_user")
+        schema = vol.Schema(
+            {
+                vol.Required(KEYS[0], default="3.67.1.32"): str,
+                vol.Required(KEYS[1], default="1800"): str,
+                vol.Required(KEYS[2], default="300"): str,
+                vol.Required(KEYS[3], default="660"): str,
+                vol.Required(KEYS[4], default=True): bool,
+            }
+        )
+
+        if user_input is not None:
+            if await validate_ip(user_input["ema_host"]):
+                return self.async_create_entry(
+                    title="APsystems ECU proxy", data=user_input
+                )
+
+            return self.async_show_form(
+                step_id="user",
+                data_schema=schema,
+                errors={"base": "Could not connect to the specified EMA host"},
+            )
+        return self.async_show_form(step_id="user", data_schema=schema)
+
 
 class OptionsFlowHandler(config_entries.OptionsFlow):
-    """Regular change of integration configuration."""
+    """Regular change of integration options."""
 
-   #def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-    def __init__(self) -> None:
-        """Init options flow."""
-   #    self.config_entry = config_entry
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Init options handler."""
+        self.config_entry = config_entry
 
     async def async_step_init(self, user_input=None):
-        """Altering the integration configuration."""
+        """Second step: Altering the integration options."""
         errors = {}
         current_options = (
             self.config_entry.data
             if not self.config_entry.options
             else self.config_entry.options
         )
-
         _LOGGER.debug("async_step_init with configuration: %s", current_options)
 
         schema = vol.Schema(
             {
-                vol.Required(KEYS[0], default=current_options.get(KEYS[0])): str,
-                vol.Required(KEYS[1], default=current_options.get(KEYS[1])): int,
-                vol.Optional(KEYS[2], default=current_options.get(KEYS[2])): int,  # Port retries
-                vol.Optional(KEYS[3], default=current_options.get(KEYS[3])): str,
-                vol.Optional(KEYS[4], default=current_options.get(KEYS[4])): str,
-                vol.Optional(KEYS[5], default=current_options.get(KEYS[5])): bool,
+                vol.Required(key, default=current_options.get(key)): (
+                    str if key != "send_to_ema" else bool
+                )
+                for key in KEYS
             }
         )
 
-        if user_input:
-            retries = user_input.get(KEYS[2], 5)  # Get port_retries from user input, default to 5
-            show_graphs = user_input.get(KEYS[5], False) # Get show_graphs from user input, default is False
-            _LOGGER.warning("2. show_graphs = %s", show_graphs)
-            ecu_id = await test_ecu_connection(self.hass, user_input["ecu_host"], retries, show_graphs)
-            if ecu_id:
+        if user_input is not None:
+            if await validate_ip(user_input["ema_host"]):
                 self.hass.config_entries.async_update_entry(
                     self.config_entry, data=user_input
                 )
                 return self.async_create_entry(title="", data={})
-            else:
-                errors["ecu_host"] = "no_ecu_found"
-                return self.async_show_form(
-                    step_id="init", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
-                )
-        else:
-            errors = {}
-            return self.async_show_form(
-                step_id="init", data_schema=schema, errors=errors
-            )
 
-
-async def test_ecu_connection(hass, ecu_host, retries, show_graphs):
-    """Test the connection to the ECU and return the ECU ID if successful."""
-    try:
-        _LOGGER.warning("3. show_graphs = %s", show_graphs)
-        ap_ecu = APsystemsSocket(ecu_host, show_graphs)
-        # Pass the retries parameter dynamically
-        _LOGGER.warning("4. show_graphs = %s", show_graphs)
-        test_query = await ap_ecu.query_ecu(retries, show_graphs)
-        ecu_id = test_query.get("ecu_id", None)
-        return ecu_id
-
-    except APsystemsInvalidData as err:
-        _LOGGER.debug(f"APsystemsInvalidData exception: {err}")
-        return None
-    except Exception as err:
-        _LOGGER.debug(f"Unknown error occurred during ECU query: {err}")
-        return None
+            errors["base"] = "Could not connect to the specified EMA host"
+        return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
