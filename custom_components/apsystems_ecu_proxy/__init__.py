@@ -1,292 +1,198 @@
-from datetime import datetime, timedelta
+""" __init__.py """
+
+
+# Standard library imports
 import logging
-from typing import Any
+from datetime import timedelta
 
-from homeassistant.components.network import async_get_source_ip
-from homeassistant.components.persistent_notification import async_create
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+# Third-party imports
+import requests
 from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.event import async_call_later, async_track_utc_time_change
-from homeassistant.util.dt import as_local
-
-from .api import MySocketAPI
-from .const import (
-    ATTR_INVERTERS,
-    ATTR_TIMESTAMP,
-    ATTR_VALUE_IF_NO_UPDATE,
-    DOMAIN,
-    SOCKET_PORTS,
-)
-from .helpers import slugify
-from .sensor import ECU_SENSORS, INVERTER_CHANNEL_SENSORS, INVERTER_SENSORS, SensorData
+from homeassistant.components.persistent_notification import create as create_persistent_notification
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from .ecu_api import APsystemsSocket, APsystemsInvalidData
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS = ["sensor"]
+
+PLATFORMS = ["sensor", "binary_sensor", "switch"]
 
 
-class APsystemsECUProxyInvalidData(Exception):
-    """Class provides passforward for error messages."""
+class ECUR:
+    def __init__(self, ipaddr, ssid, wpa, show_graphs):
+        self.ipaddr = ipaddr
+        self.show_graphs = show_graphs
+        self.cache_count = 0
+        self.data_from_cache = False
+        self.is_querying = True
+        self.inverters_online = True
+        self.ecu_restarting = False
+        self.cached_data = {}
+        self.ecu = APsystemsSocket(ipaddr, self.show_graphs)
 
 
-async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry):
-    """Get server params and start Proxy."""
+    # called from switch.py
+    def set_querying_state(self, state: bool):
+        """Set the querying state to either True or False."""
+        self.is_querying = state
 
+    # called from switch.py
+    def toggle_all_inverters(self, turn_on: bool):
+        action = 'on' if turn_on else 'off'
+        headers = {'X-Requested-With': 'XMLHttpRequest'}
+        url = f'http://{self.ipaddr}/index.php/configuration/set_switch_all_{action}'
+        _LOGGER.debug("URL = %s", url)
+        try:
+            get_url = requests.post(url, headers=headers)
+            self.inverters_online = turn_on
+            _LOGGER.debug(
+                "Response from ECU on switching the inverters \n\t%s: %s",
+                action, str(get_url.status_code)
+            )
+        except Exception as err:
+            _LOGGER.warning(
+                "Attempt to switch inverters %s failed with error: \n\t%s\n\t"
+                "This switch is only compatible with ECU-R pro and ECU-C models",
+                action, err
+            )
+
+    async def update(self, port_retries, show_graphs):
+        # Fetch ECU data or use cached data.
+        data = {}
+        
+        # If querying is stopped, use cached data.
+        if not self.is_querying:
+            _LOGGER.debug("Not querying ECU, using cached data.")
+            data = self.cached_data
+            self.data_from_cache = True
+            data["data_from_cache"] = self.data_from_cache
+            data["querying"] = self.is_querying
+            return self.cached_data
+        try:
+            # Fetch the latest port_retries value dynamically.
+            data = await self.ecu.query_ecu(port_retries, show_graphs)
+
+            if data.get("ecu_id"):
+                self.cached_data = data
+                self.cache_count = 0
+                self.data_from_cache = False
+                self.ecu_restarting = False
+                self.error_message = ""
+            else:
+                msg = "Using cached data. No ecu_id returned."
+                _LOGGER.warning(msg)
+                self.cached_data["error_message"] = msg
+                data = self.cached_data
+
+        except APsystemsInvalidData as err:
+            msg = f"Invalid data error: {err}. Using cached data."
+            if str(err) != 'timed out':
+                _LOGGER.warning(msg)
+            self.cached_data["error_message"] = msg
+            data = self.cached_data
+
+        except Exception as err:
+            msg = "General exception error. Using cached data."
+            _LOGGER.warning("Exception error: %s. Using cached data.", err)
+            self.cached_data["error_message"] = msg
+            data = self.cached_data
+
+        data["data_from_cache"] = self.data_from_cache
+        data["querying"] = self.is_querying
+        data["restart_ecu"] = self.ecu_restarting
+        _LOGGER.debug(f"Returning data: {data}")
+        
+        if not data.get("ecu_id"):
+            raise UpdateFailed("Data doesn't contain a valid ecu_id")
+        return data
+
+
+async def update_listener(hass, config):
+    # Handle options update being triggered by config entry options updates.
+    _LOGGER.warning(f"Configuration updated: {config.as_dict()}")
+
+
+async def async_setup_entry(hass, config):
+    # Setup APsystems platform
     hass.data.setdefault(DOMAIN, {})
+    interval = timedelta(seconds=config.data["scan_interval"])
 
-    # Initialize the API manager
-    api_handler = APIManager(hass, config_entry)
-    await api_handler.setup_socket_servers()
+    ecu = ECUR(config.data["ecu_host"],
+               config.data["wifi_ssid"],
+               config.data["wifi_password"],
+               config.data["show_graphs"]
+              )
 
-    # Save the API handler in hass.data for later use
-    hass.data[DOMAIN][config_entry.entry_id] = {"api_handler": api_handler}
 
-    # Forward any configured platforms (e.g., sensors)
-    await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
+    async def do_ecu_update():
+        # Pass current port_retries value dynamically.
+        return await ecu.update(config.data["port_retries"], config.data["show_graphs"])
 
-    # Add an update listener to listen for config entry changes
-    config_entry.add_update_listener(update_listener)
+    coordinator = DataUpdateCoordinator(
+        hass,
+        _LOGGER,
+        name=DOMAIN,
+        update_method=do_ecu_update,
+        update_interval=interval,
+    )
 
+    hass.data[DOMAIN] = {
+        "ecu": ecu,
+        "coordinator": coordinator
+    }
+
+    # First refresh the coordinator to make sure data is fetched.
+    await coordinator.async_config_entry_first_refresh()
+
+    # Ensure data is updated before getting it
+    await coordinator.async_refresh()
+
+    # Register the ECU device.
+    device_registry = dr.async_get(hass)
+    device_registry.async_get_or_create(
+        config_entry_id=config.entry_id,
+        identifiers={(DOMAIN, f"ecu_{ecu.ecu.ecu_id}")},
+        manufacturer="APSystems",
+        suggested_area="Roof",
+        name=f"ECU {ecu.ecu.ecu_id}",
+        model=ecu.ecu.firmware,
+        sw_version=ecu.ecu.firmware,
+    )
+
+    # Register the inverter devices.
+    inverters = coordinator.data.get("inverters", {})
+    for uid, inv_data in inverters.items():
+        device_registry.async_get_or_create(
+            config_entry_id=config.entry_id,
+            identifiers={(DOMAIN, f"inverter_{uid}")},
+            manufacturer="APSystems",
+            suggested_area="Roof",
+            name=f"Inverter {uid}",
+            model=inv_data.get("model")
+        )
+
+    # Forward platform setup requests.
+    await hass.config_entries.async_forward_entry_setups(config, PLATFORMS)
+    config.async_on_unload(config.add_update_listener(update_listener))
     return True
 
 
-async def update_listener(hass: HomeAssistant, config_entry: ConfigEntry):
-    """Handle configuration entry updates."""
-    _LOGGER.debug("Config entry updated: %s", config_entry.data)
-
-    # Get updated data from the config entry
-    new_timeout = int(config_entry.data.get("no_update_timeout"))
-    # Update the configuration for the relevant API handler(s)
-    api_handler = hass.data[DOMAIN][config_entry.entry_id]["api_handler"]
-
-    if api_handler:
-        if new_timeout != api_handler.no_update_timeout:
-            _LOGGER.debug("no_update_timeout has changed. Updating API manager.")
-            api_handler.no_update_timeout = new_timeout
-
-            # Reset the existing no_update_timer.
-            if api_handler.no_update_timer_unregister:
-                api_handler.no_update_timer_unregister()
-            api_handler.no_update_timer_unregister = async_call_later(
-                hass, timedelta(seconds=new_timeout), api_handler.fire_no_update
-            )
-
-    # Update config values in api module.
-    for socket_server in api_handler.socket_servers:
-        socket_server.update_config(config_entry)
-
-
-async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
-
-    # Stop socket servers.
-    api_handler: APIManager = hass.data[DOMAIN][config_entry.entry_id]["api_handler"]
-    await api_handler.async_shutdown()
-
-    # Unload platforms.
-    unload_ok = await hass.config_entries.async_unload_platforms(
-        config_entry, PLATFORMS
-    )
-
-    # Remove the config entry from the hass data object.
-    if unload_ok:
-        hass.data[DOMAIN].pop(config_entry.entry_id)
-        _LOGGER.debug("%s unloaded config id - %s", DOMAIN, config_entry.entry_id)
-
-    # Return that unloading was successful.
-    return unload_ok
-
-
-async def async_remove_config_entry_device(
-    hass: HomeAssistant, config_entry: ConfigEntry, device_entry: dr.DeviceEntry
-) -> bool:
-    """Remove individual devices from the integration (ok)."""
-    if device_entry is not None:
+async def async_remove_config_entry_device(hass, config, device_entry) -> bool:
+    # Handle device removal.
+    if device_entry:
         # Notify the user that the device has been removed
-        async_create(
+        create_persistent_notification(
             hass,
-            f"The following device was removed from the system: {device_entry}",
-            title="Device removal",
+            title="Device Removed",
+            message=f"The following device was removed: {device_entry.name}"
         )
         return True
     return False
 
-
-class APIManager:
-    """Class to manage api."""
-
-    socket_servers: list[MySocketAPI] = []
-    migration_required: bool = False
-
-    def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
-        """Initialize coordinator."""
-        self.hass = hass
-        self.config_entry = config_entry
-
-        # Add listener for midnight reset.
-        self.midnight_tracker_unregister = async_track_utc_time_change(
-            hass, self.midnight_reset, "0", "0", "0", local=True
-        )
-
-        # Get configuration
-        self.no_update_timeout = int(self.config_entry.data.get("no_update_timeout"))
-
-        # Add listener for 0 or None if no update.
-        self.no_update_timer_unregister = None
-
-    async def midnight_reset(self, *args):
-        """Send dispatcher message to all listeners to reset."""
-        _LOGGER.debug("midnight reset")
-
-        attribute_values = {}
-        attribute_values[ATTR_TIMESTAMP] = as_local(datetime.now())
-        self._request_sensor_to_update(
-            f"{DOMAIN}_midnight_reset",
-            SensorData(data=0, attributes=attribute_values),
-        )
-
-    async def setup_socket_servers(self) -> None:
-        """Initialise socket server."""
-        host = await async_get_source_ip(self.hass)
-
-        for port in SOCKET_PORTS:
-            _LOGGER.debug("Creating server for port %s", port)
-            server = MySocketAPI(
-                host, port, self.async_update_callback, self.config_entry
-            )
-            await server.start()
-            self.socket_servers.append(server)
-
-    async def async_shutdown(self) -> None:
-        """Run shutdown clean up."""
-        for socket_server in self.socket_servers:
-            await socket_server.stop()
-        self.socket_servers.clear()
-
-        await self.midnight_tracker_unregister()
-        if self.no_update_timer_unregister is not None:
-            self.no_update_timer_unregister()
-
-    def get_device(self, identifiers):
-        """Get device from device registry."""
-        device_registry = dr.async_get(self.hass)
-        return device_registry.async_get_device(identifiers)
-
-    def async_update_callback(self, data: dict[str, Any]):
-        """Dispatcher version of update callback."""
-
-        # Cancel no update timer as we have an update.
-        if self.no_update_timer_unregister:
-            _LOGGER.debug("Cancel 'No update' timer")
-            self.no_update_timer_unregister()
-            self.no_update_timer_unregister = None
-
-        ecu_id = data.get("ecu-id")
-
-        # Check if ECU is registered in devices
-        if not self.get_device({(DOMAIN, f"ecu_{ecu_id}")}):
-            _LOGGER.debug("Found new ECU: %s", ecu_id)
-            # Send signal to sensor listener to add new ECU
-            async_dispatcher_send(self.hass, f"{DOMAIN}_ecu_register", data)
-        else:
-            _LOGGER.debug("Update for ECU: %s", ecu_id)
-            # Request sensors to update
-            for sensor in ECU_SENSORS:
-                # Added for summation sensors to get initial attribute values
-                attribute_values = {}
-                if sensor.summation_entity:
-                    attribute_values[ATTR_TIMESTAMP] = data.get(ATTR_TIMESTAMP)
-                # Added to support no update value changes
-                if sensor.value_if_no_update != -1:
-                    attribute_values[ATTR_VALUE_IF_NO_UPDATE] = (
-                        sensor.value_if_no_update
-                    )
-                self._request_sensor_to_update(
-                    f"{DOMAIN}_{ecu_id}_{slugify(sensor.name)}",
-                    SensorData(
-                        data=data.get(sensor.parameter), attributes=attribute_values
-                    ),
-                )
-
-        # Check if inverters registered in devices
-        for uid, inverter in data.get(ATTR_INVERTERS, {}).items():
-            if not self.get_device({(DOMAIN, f"inverter_{uid}")}):
-                _LOGGER.debug("Found new Inverter: %s", inverter.get("uid"))
-
-                # Add ecu-id to inverter data so that sensor can use this.
-                inverter["ecu-id"] = ecu_id
-
-                # Send signal to sensor listener to add new Inverter
-                async_dispatcher_send(
-                    self.hass, f"{DOMAIN}_inverter_register", inverter
-                )
-            else:
-                _LOGGER.debug("Update for known inverter: %s", inverter.get("uid"))
-                for uid, inverter in data.get(ATTR_INVERTERS).items():
-                    for inverter_sensor in INVERTER_SENSORS:
-                        # Added for summation sensors to get initial attribute values
-                        attribute_values = {}
-                        if sensor.summation_entity:
-                            attribute_values[ATTR_TIMESTAMP] = data.get(ATTR_TIMESTAMP)
-                        # Added to support no update value changes
-                        if inverter_sensor.value_if_no_update != -1:
-                            attribute_values[ATTR_VALUE_IF_NO_UPDATE] = (
-                                inverter_sensor.value_if_no_update
-                            )
-                        self._request_sensor_to_update(
-                            f"{DOMAIN}_{ecu_id}_{uid}_{slugify(inverter_sensor.name)}",
-                            SensorData(
-                                data=inverter.get(inverter_sensor.parameter),
-                                attributes=attribute_values,
-                            ),
-                        )
-
-                    for channel in range(inverter.get("channel_qty", 0)):
-                        for inverter_channel_sensor in INVERTER_CHANNEL_SENSORS:
-                            try:
-                                # Added for summation sensors to get initial attribute values
-                                attribute_values = {}
-                                if inverter_channel_sensor.summation_entity:
-                                    attribute_values[ATTR_TIMESTAMP] = data.get(
-                                        ATTR_TIMESTAMP
-                                    )
-                                # Added to support no update value changes
-                                if inverter_channel_sensor.value_if_no_update != -1:
-                                    attribute_values[ATTR_VALUE_IF_NO_UPDATE] = (
-                                        inverter_channel_sensor.value_if_no_update
-                                    )
-                                self._request_sensor_to_update(
-                                    f"{DOMAIN}_{ecu_id}_{uid}_{slugify(inverter_channel_sensor.name)}_{channel + 1}",
-                                    SensorData(
-                                        data=inverter.get(
-                                            inverter_channel_sensor.parameter
-                                        )[channel],
-                                        attributes=attribute_values,
-                                    ),
-                                )
-                            except (ValueError, IndexError):
-                                _LOGGER.warning("There was a value or index error")
-                                continue
-
-        # Start the no update timer with the updated value.
-        self.no_update_timer_unregister = async_call_later(
-            self.hass, timedelta(seconds=self.no_update_timeout), self.fire_no_update
-        )
-
-    def _request_sensor_to_update(self, channel_id: str, data: Any):
-        """Send a dispatch message to update sensor."""
-        _LOGGER.debug(
-            "Requesting %s to update with value %s",
-            channel_id.replace(f"{DOMAIN}_", ""),
-            data,
-        )
-        async_dispatcher_send(self.hass, channel_id, data)
-
-    async def fire_no_update(self, *args):
-        """Update no update sensors."""
-        _LOGGER.debug("Firing no update")
-        async_dispatcher_send(
-            self.hass,
-            f"{DOMAIN}_no_update",
-        )
+async def async_unload_entry(hass, config):
+    unload_ok = await hass.config_entries.async_unload_platforms(config, PLATFORMS)
+    ecu = hass.data[DOMAIN].get("ecu")
+    ecu.stop_query()
+    if unload_ok:
+        hass.data[DOMAIN].pop(config.entry_id)
+    return unload_ok
