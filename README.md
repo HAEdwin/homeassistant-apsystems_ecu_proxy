@@ -9,7 +9,7 @@ The integration is not compatible with the ECU-C https://github.com/HAEdwin/home
 ## Background & acknowledgement
 This integration intercepts and collects data from your APsystems driven PV installation. 
 The data from the ***E***nergy ***C***ommunication ***U***nit is first being received by this integration and then passed directly on to APsystems ***E***nergy ***M***onitoring and ***A***nalysis website.
-Any returned data from EMA is directly sent back to the ECU. After this, the optained data is then being analyzed for use in Home Assistant so it doesn't disturb the regular process of the ECU sending data to EMA and vice versa.
+Any returned data from EMA is directly sent back to the ECU. After this, the data obtained is then being analyzed for use in Home Assistant so it doesn't disturb the regular process of the ECU sending data to EMA and vice versa.
 This custom integration was made possible by the hard work and excellent knowledge of @msp1974 - thank you for your creativity in solving the new challenges that this integration presented!
 
 ## Prerequisites
