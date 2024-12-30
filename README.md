@@ -17,6 +17,7 @@ This custom integration was made possible by the hard work of @msp1974 - thank y
 - PiHole, AdGuard running as add-on installed on Home Assistant or something else like Unifi controller (from network version 8.2.93 or higher) to rewrite DNS.
 - Working HACS installation and GitHub account (manual installation is possible).
 - An ECU-R, ethernet or WiFi connected.
+- Inverters need to be online (daylight) for quick results.
 
 ## Install the integration
 _Note for pre-v1.1.0 users:
