@@ -61,3 +61,5 @@ A: Partly it depends on when you compare the results. If the inverters are offli
 A: The inverters are off-line, without them the integration is unable to determen what hardware is connected to the ECU.
 - Q: Will deleting the integration make me loose all the data (like Lifetime Energy)?
 A: Yes, deleting the integration will remove the entities and their most current values - history data however is kept in de HA database.
+- Q: One (or more) inverters are down, what is wrong?
+A: Check that the ECU is properly positioned relative to the inverters. It may happen that the inverter works normally, but the reception on the ECU side is not optimal. Also look at the ECU current Power parameter, which should be a good indication of the total power that the installation could produce at that moment.
