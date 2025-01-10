@@ -4,7 +4,10 @@
 ![Home Assistant Dashboard](https://github.com/HAEdwin/homeassistant-apsystems_ecu_proxy/blob/main/Capture.PNG)
 # APsystems ECU Proxy
 Works and tested with the ECU-R (2160....) if the integration works for your ECU model (ECU-B?), please let me know which model you own!
-The integration is not compatible with the ECU-C https://github.com/HAEdwin/homeassistant-apsystems_ecu_proxy/issues/2 and also not compatible with the ECU-R 2162....)
+
+**The integration is not compatible with:**
+- the ECU-C https://github.com/HAEdwin/homeassistant-apsystems_ecu_proxy/issues/2
+- the ECU-R 2162.... https://github.com/HAEdwin/homeassistant-apsystems_ecu_proxy/issues/13
 
 ## Background & acknowledgement
 This integration intercepts and collects data from your APsystems driven PV installation. 
