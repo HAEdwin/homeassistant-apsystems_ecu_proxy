@@ -1,5 +1,6 @@
 [![Validate with hassfest](https://github.com/HAEdwin/homeassistant-apsystems_ecu_proxy/actions/workflows/hassfest.yaml/badge.svg)](https://github.com/HAEdwin/homeassistant-apsystems_ecu_proxy/actions/workflows/hassfest.yaml)
 [![Validate with HACS](https://github.com/HAEdwin/homeassistant-apsystems_ecu_proxy/actions/workflows/validatewithhacs.yml/badge.svg)](https://github.com/HAEdwin/homeassistant-apsystems_ecu_proxy/actions/workflows/validatewithhacs.yml)
+[![hacs_badge](https://img.shields.io/maintenance/no/2025)](https://github.com/haedwin/homeassistant-apsystems_ecu_reader)
 
 ![Home Assistant Dashboard](https://github.com/HAEdwin/homeassistant-apsystems_ecu_proxy/blob/main/Capture.PNG)
 # APsystems ECU Proxy
