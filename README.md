@@ -4,7 +4,7 @@
 
 ![Home Assistant Dashboard](https://github.com/HAEdwin/homeassistant-apsystems_ecu_proxy/blob/main/Capture.PNG)
 # APsystems ECU Proxy
-Works and tested with the ECU-R (2160....) if the integration works for your ECU model (ECU-B?), please let me know which model you own!
+Works and tested with the ECU-B (2163....) if the integration works for your ECU model (ECU-R 2160?), please let me know!
 
 > [!IMPORTANT]
 > This integration is not compatible with:
